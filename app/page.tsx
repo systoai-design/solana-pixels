@@ -46,8 +46,64 @@ export default function SolanaEternalCanvas() {
 
   const isAdmin = connected && publicKey && publicKey.toString() === ADMIN_WALLET
 
+  const savePixelBlocksToStorage = (blocks: PixelBlock[]) => {
+    try {
+      localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
+      localStorage.setItem("sol-pixel-last-update", Date.now().toString())
+    } catch (error) {
+      console.error("[v0] Failed to save to localStorage:", error)
+    }
+  }
+
+  const loadPixelBlocksFromStorage = (): PixelBlock[] => {
+    try {
+      const stored = localStorage.getItem("sol-pixel-blocks")
+      return stored ? JSON.parse(stored) : []
+    } catch (error) {
+      console.error("[v0] Failed to load from localStorage:", error)
+      return []
+    }
+  }
+
+  const syncPixelBlocks = useCallback(() => {
+    const storedBlocks = loadPixelBlocksFromStorage()
+    if (storedBlocks.length !== pixelBlocks.length) {
+      console.log("[v0] Syncing pixel blocks from storage:", storedBlocks.length, "blocks")
+      setPixelBlocks(storedBlocks)
+
+      // Update total pixels sold
+      const totalPixels = storedBlocks.reduce((total, block) => total + block.width * block.height, 0)
+      setTotalPixelsSold(totalPixels)
+
+      // Show notification for new blocks
+      if (storedBlocks.length > pixelBlocks.length) {
+        const newBlocks = storedBlocks.length - pixelBlocks.length
+        setNewBlockNotification(`${newBlocks} new pixel block${newBlocks > 1 ? "s" : ""} purchased!`)
+        setTimeout(() => setNewBlockNotification(null), 3000)
+      }
+    }
+  }, [pixelBlocks.length])
+
+  useEffect(() => {
+    // Load initial pixel blocks from storage
+    const initialBlocks = loadPixelBlocksFromStorage()
+    if (initialBlocks.length > 0) {
+      setPixelBlocks(initialBlocks)
+      const totalPixels = initialBlocks.reduce((total, block) => total + block.width * block.height, 0)
+      setTotalPixelsSold(totalPixels)
+    }
+
+    // Set up real-time sync polling every 3 seconds
+    const syncInterval = setInterval(syncPixelBlocks, 3000)
+
+    return () => clearInterval(syncInterval)
+  }, [syncPixelBlocks])
+
   const handlePurchaseSuccess = (newBlock: PixelBlock) => {
-    setPixelBlocks((prev) => [...prev, newBlock])
+    const updatedBlocks = [...pixelBlocks, newBlock]
+    setPixelBlocks(updatedBlocks)
+    savePixelBlocksToStorage(updatedBlocks)
+
     setTotalPixelsSold((prev) => prev + newBlock.width * newBlock.height)
     setSelectedArea(null)
 
@@ -60,6 +116,8 @@ export default function SolanaEternalCanvas() {
       },
       ...prev.slice(0, 4),
     ])
+
+    console.log("[v0] Purchase saved to storage for real-time sync")
   }
 
   const handleImageUpload = (blockIndex: number, imageUrl: string) => {
@@ -75,6 +133,7 @@ export default function SolanaEternalCanvas() {
 
       if (globalIndex !== -1) {
         updated[globalIndex] = { ...updated[globalIndex], imageUrl }
+        savePixelBlocksToStorage(updated)
       }
       return updated
     })
@@ -101,6 +160,7 @@ export default function SolanaEternalCanvas() {
           block.y + block.height > area.y
         )
       })
+      savePixelBlocksToStorage(filtered)
       return filtered
     })
 
@@ -143,6 +203,7 @@ export default function SolanaEternalCanvas() {
             block.owner === blockToRemove.owner
           ),
       )
+      savePixelBlocksToStorage(filtered)
       return filtered
     })
 

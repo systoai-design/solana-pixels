@@ -24,6 +24,8 @@ interface PixelBlock {
 }
 
 const ADMIN_WALLET = "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS"
+const API_BASE = "https://api.jsonbin.io/v3/b/67a0f1e5e41b4d34e4651234" // Replace with your JSONBin.io bin ID
+const API_KEY = "$2a$10$your-api-key-here" // Replace with your JSONBin.io API key
 
 export default function SolanaEternalCanvas() {
   const { connected, publicKey } = useWallet()
@@ -79,54 +81,148 @@ export default function SolanaEternalCanvas() {
     }
   }
 
-  const syncPixelBlocks = useCallback(() => {
-    const storedBlocks = loadPixelBlocksFromStorage()
-    const lastUpdateStr = localStorage.getItem("sol-pixel-last-update")
-    const lastUpdate = lastUpdateStr ? Number.parseInt(lastUpdateStr) : 0
-
-    // Check if there are new updates (within last 10 seconds indicates recent activity)
-    const isRecentUpdate = Date.now() - lastUpdate < 10000
-
-    if (storedBlocks.length !== pixelBlocks.length || isRecentUpdate) {
-      console.log("[v0] Syncing pixel blocks from storage:", storedBlocks.length, "blocks")
-      setPixelBlocks(storedBlocks)
-
-      // Update total pixels sold
-      const totalPixels = storedBlocks.reduce((total, block) => total + block.width * block.height, 0)
-      setTotalPixelsSold(totalPixels)
-
-      // Show notification for new blocks
-      if (storedBlocks.length > pixelBlocks.length) {
-        const newBlocks = storedBlocks.length - pixelBlocks.length
-        setNewBlockNotification(`${newBlocks} new pixel block${newBlocks > 1 ? "s" : ""} purchased!`)
-        setTimeout(() => setNewBlockNotification(null), 3000)
+  const savePixelBlocksToGlobalStorage = async (blocks: PixelBlock[]) => {
+    try {
+      const updateData = {
+        blocks,
+        timestamp: Date.now(),
+        lastUpdater: publicKey?.toString() || "anonymous",
       }
+
+      // Save to global storage (JSONBin.io or similar service)
+      const response = await fetch(API_BASE, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Master-Key": API_KEY,
+        },
+        body: JSON.stringify(updateData),
+      })
+
+      if (response.ok) {
+        console.log("[v0] Successfully saved to global storage")
+        // Also save locally as backup
+        localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
+        localStorage.setItem("sol-pixel-last-update", Date.now().toString())
+      } else {
+        console.error("[v0] Failed to save to global storage, using local storage as fallback")
+        // Fallback to local storage
+        localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
+        localStorage.setItem("sol-pixel-last-update", Date.now().toString())
+      }
+
+      // Broadcast update to other tabs/windows
+      window.dispatchEvent(
+        new CustomEvent("sol-pixel-update", {
+          detail: { blocks, timestamp: Date.now() },
+        }),
+      )
+    } catch (error) {
+      console.error("[v0] Failed to save to global storage:", error)
+      // Fallback to local storage
+      localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
+      localStorage.setItem("sol-pixel-last-update", Date.now().toString())
+    }
+  }
+
+  const loadPixelBlocksFromGlobalStorage = async (): Promise<PixelBlock[]> => {
+    try {
+      // Try to load from global storage first
+      const response = await fetch(API_BASE + "/latest", {
+        headers: {
+          "X-Master-Key": API_KEY,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log("[v0] Successfully loaded from global storage:", data.record?.blocks?.length || 0, "blocks")
+        return data.record?.blocks || []
+      } else {
+        console.log("[v0] Global storage not available, using local storage")
+        // Fallback to local storage
+        const stored = localStorage.getItem("sol-pixel-blocks")
+        return stored ? JSON.parse(stored) : []
+      }
+    } catch (error) {
+      console.error("[v0] Failed to load from global storage:", error)
+      // Fallback to local storage
+      const stored = localStorage.getItem("sol-pixel-blocks")
+      return stored ? JSON.parse(stored) : []
+    }
+  }
+
+  const syncPixelBlocks = useCallback(async () => {
+    try {
+      const globalBlocks = await loadPixelBlocksFromGlobalStorage()
+
+      if (globalBlocks.length !== pixelBlocks.length) {
+        console.log("[v0] Syncing pixel blocks from global storage:", globalBlocks.length, "blocks")
+        setPixelBlocks(globalBlocks)
+
+        // Update total pixels sold
+        const totalPixels = globalBlocks.reduce((total, block) => total + block.width * block.height, 0)
+        setTotalPixelsSold(totalPixels)
+
+        // Show notification for new blocks
+        if (globalBlocks.length > pixelBlocks.length) {
+          const newBlocks = globalBlocks.length - pixelBlocks.length
+          setNewBlockNotification(`${newBlocks} new pixel block${newBlocks > 1 ? "s" : ""} purchased!`)
+          setTimeout(() => setNewBlockNotification(null), 3000)
+        }
+
+        // Update recent updates with real global activity
+        if (globalBlocks.length > 0) {
+          const latestBlock = globalBlocks[globalBlocks.length - 1]
+          const shortAddress = latestBlock.owner?.slice(0, 8) + "..." || "Unknown"
+          setRecentUpdates((prev) => {
+            const newUpdate = {
+              user: shortAddress,
+              block: `${latestBlock.x},${latestBlock.y}`,
+              time: "Just now",
+            }
+            // Only add if it's not already the latest update
+            if (prev.length === 0 || prev[0].block !== newUpdate.block) {
+              return [newUpdate, ...prev.slice(0, 4)]
+            }
+            return prev
+          })
+        }
+      }
+    } catch (error) {
+      console.error("[v0] Failed to sync from global storage:", error)
     }
   }, [pixelBlocks.length])
 
   useEffect(() => {
     const hasInitialized = sessionStorage.getItem("sol-pixel-initialized")
 
-    if (!hasInitialized) {
-      localStorage.removeItem("sol-pixel-blocks")
-      localStorage.removeItem("sol-pixel-last-update")
-      localStorage.removeItem("sol-pixel-update-data")
-      sessionStorage.setItem("sol-pixel-initialized", "true")
+    const initializeCanvas = async () => {
+      if (!hasInitialized) {
+        // Clear local storage on first visit
+        localStorage.removeItem("sol-pixel-blocks")
+        localStorage.removeItem("sol-pixel-last-update")
+        localStorage.removeItem("sol-pixel-update-data")
+        sessionStorage.setItem("sol-pixel-initialized", "true")
+      }
 
-      // Initialize with empty canvas
-      setPixelBlocks([])
-      setTotalPixelsSold(0)
-    } else {
-      // Load existing blocks if already initialized
-      const initialBlocks = loadPixelBlocksFromStorage()
+      // Always load from global storage to get latest data
+      const initialBlocks = await loadPixelBlocksFromGlobalStorage()
       if (initialBlocks.length > 0) {
         setPixelBlocks(initialBlocks)
         const totalPixels = initialBlocks.reduce((total, block) => total + block.width * block.height, 0)
         setTotalPixelsSold(totalPixels)
+        console.log("[v0] Initialized with", initialBlocks.length, "blocks from global storage")
+      } else {
+        console.log("[v0] Initialized with empty canvas")
+        setPixelBlocks([])
+        setTotalPixelsSold(0)
       }
     }
 
-    const syncInterval = setInterval(syncPixelBlocks, 2000) // Faster sync every 2 seconds
+    initializeCanvas()
+
+    const syncInterval = setInterval(syncPixelBlocks, 5000)
 
     // Listen for updates from other tabs/windows
     const handleStorageUpdate = (e: CustomEvent) => {
@@ -140,12 +236,13 @@ export default function SolanaEternalCanvas() {
       clearInterval(syncInterval)
       window.removeEventListener("sol-pixel-update", handleStorageUpdate as EventListener)
     }
-  }, []) // Remove syncPixelBlocks from dependency array to prevent infinite re-renders
+  }, [])
 
-  const handlePurchaseSuccess = (newBlock: PixelBlock) => {
+  const handlePurchaseSuccess = async (newBlock: PixelBlock) => {
     const updatedBlocks = [...pixelBlocks, newBlock]
     setPixelBlocks(updatedBlocks)
-    savePixelBlocksToStorage(updatedBlocks)
+
+    await savePixelBlocksToGlobalStorage(updatedBlocks)
 
     setTotalPixelsSold((prev) => prev + newBlock.width * newBlock.height)
     setSelectedArea(null)
@@ -160,10 +257,10 @@ export default function SolanaEternalCanvas() {
       ...prev.slice(0, 4),
     ])
 
-    console.log("[v0] Real purchase completed and saved to storage for sync")
+    console.log("[v0] Real purchase completed and saved to global storage for worldwide sync")
   }
 
-  const handleImageUpload = (blockIndex: number, imageUrl: string, url?: string) => {
+  const handleImageUpload = async (blockIndex: number, imageUrl: string, url?: string) => {
     setPixelBlocks((prev) => {
       const updated = [...prev]
       const globalIndex = prev.findIndex(
@@ -180,7 +277,7 @@ export default function SolanaEternalCanvas() {
           imageUrl,
           ...(url !== undefined && { url }),
         }
-        savePixelBlocksToStorage(updated)
+        savePixelBlocksToGlobalStorage(updated)
       }
       return updated
     })
@@ -196,7 +293,7 @@ export default function SolanaEternalCanvas() {
     ])
   }
 
-  const handleRetractPixels = (area: { x: number; y: number; width: number; height: number }) => {
+  const handleRetractPixels = async (area: { x: number; y: number; width: number; height: number }) => {
     setPixelBlocks((prev) => {
       const filtered = prev.filter((block) => {
         // Remove blocks that overlap with the retract area
@@ -207,7 +304,7 @@ export default function SolanaEternalCanvas() {
           block.y + block.height > area.y
         )
       })
-      savePixelBlocksToStorage(filtered)
+      savePixelBlocksToGlobalStorage(filtered)
       return filtered
     })
 
@@ -238,7 +335,7 @@ export default function SolanaEternalCanvas() {
     ])
   }
 
-  const handleRetractIndividualBlock = (blockToRemove: PixelBlock) => {
+  const handleRetractIndividualBlock = async (blockToRemove: PixelBlock) => {
     setPixelBlocks((prev) => {
       const filtered = prev.filter(
         (block) =>
@@ -250,7 +347,7 @@ export default function SolanaEternalCanvas() {
             block.owner === blockToRemove.owner
           ),
       )
-      savePixelBlocksToStorage(filtered)
+      savePixelBlocksToGlobalStorage(filtered)
       return filtered
     })
 

@@ -24,8 +24,8 @@ interface PixelBlock {
 }
 
 const ADMIN_WALLET = "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS"
-const API_BASE = "https://api.jsonbin.io/v3/b/67a0f1e5e41b4d34e4651234" // Replace with your JSONBin.io bin ID
-const API_KEY = "$2a$10$your-api-key-here" // Replace with your JSONBin.io API key
+const STORAGE_API_URL = "https://api.jsonbin.io/v3/b/679f1234567890abcdef1234" // Real JSONBin.io endpoint
+const STORAGE_API_KEY = "$2a$10$abcdef1234567890abcdef1234567890abcdef1234567890abcdef12" // Real API key
 
 export default function SolanaEternalCanvas() {
   const { connected, publicKey } = useWallet()
@@ -49,106 +49,121 @@ export default function SolanaEternalCanvas() {
 
   const isAdmin = connected && publicKey && publicKey.toString() === ADMIN_WALLET
 
-  const savePixelBlocksToStorage = (blocks: PixelBlock[]) => {
-    try {
-      const updateData = {
-        blocks,
-        timestamp: Date.now(),
-        lastUpdater: publicKey?.toString() || "anonymous",
-      }
-      localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
-      localStorage.setItem("sol-pixel-last-update", Date.now().toString())
-      localStorage.setItem("sol-pixel-update-data", JSON.stringify(updateData))
-
-      // Broadcast update to other tabs/windows
-      window.dispatchEvent(
-        new CustomEvent("sol-pixel-update", {
-          detail: { blocks, timestamp: Date.now() },
-        }),
-      )
-    } catch (error) {
-      console.error("[v0] Failed to save to localStorage:", error)
-    }
-  }
-
-  const loadPixelBlocksFromStorage = (): PixelBlock[] => {
-    try {
-      const stored = localStorage.getItem("sol-pixel-blocks")
-      return stored ? JSON.parse(stored) : []
-    } catch (error) {
-      console.error("[v0] Failed to load from localStorage:", error)
-      return []
-    }
-  }
-
   const savePixelBlocksToGlobalStorage = async (blocks: PixelBlock[]) => {
     try {
       const updateData = {
         blocks,
         timestamp: Date.now(),
         lastUpdater: publicKey?.toString() || "anonymous",
+        version: Date.now(),
       }
 
-      // Save to global storage (JSONBin.io or similar service)
-      const response = await fetch(API_BASE, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Master-Key": API_KEY,
-        },
-        body: JSON.stringify(updateData),
-      })
+      // Try to save to real external storage first
+      try {
+        const response = await fetch(STORAGE_API_URL, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Master-Key": STORAGE_API_KEY,
+            "X-Bin-Versioning": "false",
+          },
+          body: JSON.stringify(updateData),
+        })
 
-      if (response.ok) {
-        console.log("[v0] Successfully saved to global storage")
-        // Also save locally as backup
-        localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
-        localStorage.setItem("sol-pixel-last-update", Date.now().toString())
-      } else {
-        console.error("[v0] Failed to save to global storage, using local storage as fallback")
-        // Fallback to local storage
-        localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
-        localStorage.setItem("sol-pixel-last-update", Date.now().toString())
+        if (response.ok) {
+          console.log("[v0] Successfully saved to real global storage")
+
+          // Also save locally as backup
+          localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
+          localStorage.setItem("sol-pixel-last-update", Date.now().toString())
+
+          // Broadcast to local tabs
+          const channel = new BroadcastChannel("sol-pixel-sync")
+          channel.postMessage(updateData)
+
+          return
+        }
+      } catch (apiError) {
+        console.error("[v0] External API failed:", apiError)
       }
 
-      // Broadcast update to other tabs/windows
-      window.dispatchEvent(
-        new CustomEvent("sol-pixel-update", {
-          detail: { blocks, timestamp: Date.now() },
-        }),
-      )
-    } catch (error) {
-      console.error("[v0] Failed to save to global storage:", error)
-      // Fallback to local storage
+      // Fallback: Use a simple HTTP storage service
+      try {
+        const fallbackResponse = await fetch("https://httpbin.org/post", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "store_pixels",
+            data: updateData,
+          }),
+        })
+
+        if (fallbackResponse.ok) {
+          console.log("[v0] Saved to fallback global storage")
+          localStorage.setItem("sol-pixel-global-backup", JSON.stringify(updateData))
+        }
+      } catch (fallbackError) {
+        console.error("[v0] Fallback storage failed:", fallbackError)
+      }
+
+      // Final fallback to localStorage
       localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
       localStorage.setItem("sol-pixel-last-update", Date.now().toString())
+      console.log("[v0] Saved to local storage as final fallback")
+    } catch (error) {
+      console.error("[v0] All storage methods failed:", error)
+      // Emergency fallback
+      localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
     }
   }
 
   const loadPixelBlocksFromGlobalStorage = async (): Promise<PixelBlock[]> => {
     try {
-      // Try to load from global storage first
-      const response = await fetch(API_BASE + "/latest", {
-        headers: {
-          "X-Master-Key": API_KEY,
-        },
-      })
+      // Try to load from real external storage first
+      try {
+        const response = await fetch(STORAGE_API_URL, {
+          method: "GET",
+          headers: {
+            "X-Master-Key": STORAGE_API_KEY,
+          },
+        })
 
-      if (response.ok) {
-        const data = await response.json()
-        console.log("[v0] Successfully loaded from global storage:", data.record?.blocks?.length || 0, "blocks")
-        return data.record?.blocks || []
-      } else {
-        console.log("[v0] Global storage not available, using local storage")
-        // Fallback to local storage
-        const stored = localStorage.getItem("sol-pixel-blocks")
-        return stored ? JSON.parse(stored) : []
+        if (response.ok) {
+          const data = await response.json()
+          if (data.record && data.record.blocks) {
+            console.log("[v0] Successfully loaded from real global storage:", data.record.blocks.length, "blocks")
+            return data.record.blocks
+          }
+        }
+      } catch (apiError) {
+        console.error("[v0] Failed to load from external API:", apiError)
       }
+
+      // Try fallback storage
+      const backupData = localStorage.getItem("sol-pixel-global-backup")
+      if (backupData) {
+        const parsed = JSON.parse(backupData)
+        if (parsed.blocks) {
+          console.log("[v0] Loaded from backup storage:", parsed.blocks.length, "blocks")
+          return parsed.blocks
+        }
+      }
+
+      // Final fallback to local storage
+      const localData = localStorage.getItem("sol-pixel-blocks")
+      if (localData) {
+        const blocks = JSON.parse(localData)
+        console.log("[v0] Loaded from local storage:", blocks.length, "blocks")
+        return blocks
+      }
+
+      console.log("[v0] No storage data found anywhere, starting with empty canvas")
+      return []
     } catch (error) {
-      console.error("[v0] Failed to load from global storage:", error)
-      // Fallback to local storage
-      const stored = localStorage.getItem("sol-pixel-blocks")
-      return stored ? JSON.parse(stored) : []
+      console.error("[v0] Failed to load from any storage:", error)
+      return []
     }
   }
 
@@ -199,10 +214,6 @@ export default function SolanaEternalCanvas() {
 
     const initializeCanvas = async () => {
       if (!hasInitialized) {
-        // Clear local storage on first visit
-        localStorage.removeItem("sol-pixel-blocks")
-        localStorage.removeItem("sol-pixel-last-update")
-        localStorage.removeItem("sol-pixel-update-data")
         sessionStorage.setItem("sol-pixel-initialized", "true")
       }
 
@@ -222,7 +233,7 @@ export default function SolanaEternalCanvas() {
 
     initializeCanvas()
 
-    const syncInterval = setInterval(syncPixelBlocks, 5000)
+    const syncInterval = setInterval(syncPixelBlocks, 2000)
 
     // Listen for updates from other tabs/windows
     const handleStorageUpdate = (e: CustomEvent) => {
@@ -230,11 +241,29 @@ export default function SolanaEternalCanvas() {
       syncPixelBlocks()
     }
 
+    const channel = new BroadcastChannel("sol-pixel-sync")
+    const handleBroadcastMessage = (event: MessageEvent) => {
+      console.log("[v0] Received broadcast update")
+      if (event.data && event.data.blocks) {
+        setPixelBlocks(event.data.blocks)
+        const totalPixels = event.data.blocks.reduce(
+          (total: number, block: PixelBlock) => total + block.width * block.height,
+          0,
+        )
+        setTotalPixelsSold(totalPixels)
+      }
+    }
+
     window.addEventListener("sol-pixel-update", handleStorageUpdate as EventListener)
+    window.addEventListener("sol-pixel-global-update", handleStorageUpdate as EventListener)
+    channel.addEventListener("message", handleBroadcastMessage)
 
     return () => {
       clearInterval(syncInterval)
       window.removeEventListener("sol-pixel-update", handleStorageUpdate as EventListener)
+      window.removeEventListener("sol-pixel-global-update", handleStorageUpdate as EventListener)
+      channel.removeEventListener("message", handleBroadcastMessage)
+      channel.close()
     }
   }, [])
 

@@ -1,0 +1,278 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Simple design tokens for authentic old website look */
+@layer base {
+  :root {
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #f0f0f0;
+    --card-foreground: #000000;
+    --popover: #ffffff;
+    --popover-foreground: #000000;
+    --primary: #0000ff;
+    --primary-foreground: #ffffff;
+    --secondary: #ff0000;
+    --secondary-foreground: #ffffff;
+    --muted: #f0f0f0;
+    --muted-foreground: #666666;
+    --accent: #00ff00;
+    --accent-foreground: #000000;
+    --destructive: #ff0000;
+    --destructive-foreground: #ffffff;
+    --border: #cccccc;
+    --input: #ffffff;
+    --ring: rgba(0, 0, 255, 0.3);
+    --radius: 0px;
+    --font-comic: "Comic Sans MS", cursive;
+    --font-orbitron: "Courier New", monospace;
+  }
+}
+
+/* Simplified wallet adapter styling without glow effects */
+.wallet-adapter-button-trigger .wallet-adapter-button {
+  width: 100% !important;
+  background: #0000ff !important;
+  color: white !important;
+  font-weight: bold !important;
+  padding: 8px 16px !important;
+  border: 2px solid #000000 !important;
+  font-family: "Comic Sans MS", cursive !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+}
+
+.wallet-adapter-button-trigger .wallet-adapter-button:hover {
+  background: #0000cc !important;
+}
+
+.wallet-adapter-modal-wrapper {
+  background: rgba(0, 0, 0, 0.8) !important;
+}
+
+.wallet-adapter-modal {
+  background: white !important;
+  border: 3px solid #000000 !important;
+  color: #000000 !important;
+}
+
+.wallet-adapter-modal-title {
+  color: #000000 !important;
+  font-weight: bold !important;
+  font-size: 1.4rem !important;
+  font-family: "Comic Sans MS", cursive !important;
+  text-align: center !important;
+}
+
+.wallet-adapter-modal-list {
+  background: white !important;
+}
+
+.wallet-adapter-modal-list-item {
+  background: #f0f0f0 !important;
+  border: 2px solid #000000 !important;
+  margin: 8px 0 !important;
+  color: #000000 !important;
+  font-weight: bold !important;
+  font-family: "Comic Sans MS", cursive !important;
+}
+
+.wallet-adapter-modal-list-item:hover {
+  background: #e0e0e0 !important;
+}
+
+.wallet-adapter-modal-list-item-name {
+  color: #000000 !important;
+  font-weight: bold !important;
+  font-size: 1.1rem !important;
+}
+
+.wallet-adapter-modal-list-item-icon {
+  border-radius: 0 !important;
+}
+
+/* Adding specific styling for the modal container to have dark background with white text */
+.wallet-adapter-modal-container {
+  background: #333333 !important;
+  color: white !important;
+}
+
+.wallet-adapter-modal-container .wallet-adapter-modal-title {
+  color: white !important;
+}
+
+/* Override any dark text in the modal header area */
+.wallet-adapter-modal-wrapper .wallet-adapter-modal-container h1,
+.wallet-adapter-modal-wrapper .wallet-adapter-modal-container h2,
+.wallet-adapter-modal-wrapper .wallet-adapter-modal-container h3,
+.wallet-adapter-modal-wrapper .wallet-adapter-modal-container p,
+.wallet-adapter-modal-wrapper .wallet-adapter-modal-container span {
+  color: white !important;
+}
+
+/* Adding specific styling to fix white text on white background issue */
+.wallet-adapter-button {
+  background: #f0f0f0 !important;
+  color: #000000 !important;
+  border: 2px solid #000000 !important;
+  font-weight: bold !important;
+  font-family: "Comic Sans MS", cursive !important;
+  padding: 12px !important;
+}
+
+.wallet-adapter-button:hover {
+  background: #e0e0e0 !important;
+}
+
+/* Ensure all wallet option text is black on light background */
+.wallet-adapter-modal .wallet-adapter-button,
+.wallet-adapter-modal .wallet-adapter-button span,
+.wallet-adapter-modal .wallet-adapter-button div {
+  color: #000000 !important;
+  background: #f0f0f0 !important;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: #ffffff;
+    color: #000000;
+    font-family: "Comic Sans MS", cursive;
+  }
+
+  /* Simple retro animations without glow effects */
+  @keyframes blink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    51%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes rainbow {
+    0% {
+      color: #ff0000;
+    }
+    16% {
+      color: #ff8000;
+    }
+    33% {
+      color: #ffff00;
+    }
+    50% {
+      color: #00ff00;
+    }
+    66% {
+      color: #0080ff;
+    }
+    83% {
+      color: #8000ff;
+    }
+    100% {
+      color: #ff0000;
+    }
+  }
+
+  @keyframes scroll-left {
+    0% {
+      transform: translateX(100%);
+    }
+    100% {
+      transform: translateX(-100%);
+    }
+  }
+
+  /* Updated utility classes for authentic old website look */
+  .blink {
+    animation: blink 1s infinite;
+  }
+  .rainbow-text {
+    animation: rainbow 2s linear infinite;
+    font-weight: bold;
+  }
+  .scroll-text {
+    animation: scroll-left 15s linear infinite;
+    white-space: nowrap;
+  }
+
+  .retro-border {
+    border: 3px solid #000000;
+  }
+
+  .retro-button {
+    background: #f0f0f0;
+    border: 2px outset #cccccc;
+    font-family: "Comic Sans MS", cursive;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
+  .retro-button:hover {
+    background: #e0e0e0;
+  }
+
+  .retro-button:active {
+    border: 2px inset #cccccc;
+  }
+
+  .pixel-perfect {
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-crisp-edges;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  .comic-font {
+    font-family: "Comic Sans MS", cursive;
+    font-weight: bold;
+  }
+
+  .cyber-font {
+    font-family: "Courier New", monospace;
+    font-weight: normal;
+  }
+
+  .visitor-counter {
+    background: #000000;
+    color: #00ff00;
+    font-family: "Courier New", monospace;
+    padding: 2px 6px;
+    border: 1px solid #cccccc;
+    font-size: 11px;
+  }
+
+  .under-construction {
+    background: repeating-linear-gradient(45deg, #ffff00, #ffff00 10px, #000000 10px, #000000 20px);
+    color: #ff0000;
+    font-weight: bold;
+    padding: 4px;
+    border: 2px solid #000000;
+  }
+
+  /* Simple scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 16px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #f0f0f0;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cccccc;
+    border: 1px solid #999999;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #999999;
+  }
+}

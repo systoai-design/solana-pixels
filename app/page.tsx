@@ -20,6 +20,7 @@ interface PixelBlock {
   owner?: string
   imageUrl?: string
   color?: string
+  url?: string
 }
 
 const ADMIN_WALLET = "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS"
@@ -120,7 +121,7 @@ export default function SolanaEternalCanvas() {
     console.log("[v0] Purchase saved to storage for real-time sync")
   }
 
-  const handleImageUpload = (blockIndex: number, imageUrl: string) => {
+  const handleImageUpload = (blockIndex: number, imageUrl: string, url?: string) => {
     setPixelBlocks((prev) => {
       const updated = [...prev]
       const globalIndex = prev.findIndex(
@@ -132,7 +133,11 @@ export default function SolanaEternalCanvas() {
       )
 
       if (globalIndex !== -1) {
-        updated[globalIndex] = { ...updated[globalIndex], imageUrl }
+        updated[globalIndex] = {
+          ...updated[globalIndex],
+          imageUrl,
+          ...(url !== undefined && { url }),
+        }
         savePixelBlocksToStorage(updated)
       }
       return updated
@@ -369,6 +374,26 @@ export default function SolanaEternalCanvas() {
     setIsSelecting(false)
   }
 
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isSelecting) return // Don't handle clicks during selection
+
+    const coords = getCanvasCoordinates(e)
+
+    // Find clicked pixel block
+    const clickedBlock = pixelBlocks.find(
+      (block) =>
+        coords.x >= block.x &&
+        coords.x < block.x + block.width &&
+        coords.y >= block.y &&
+        coords.y < block.y + block.height,
+    )
+
+    if (clickedBlock && clickedBlock.url) {
+      // Open URL in new tab
+      window.open(clickedBlock.url, "_blank", "noopener,noreferrer")
+    }
+  }
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -419,7 +444,7 @@ export default function SolanaEternalCanvas() {
           />
         </div>
 
-        <h1 className="text-6xl font-bold text-black mb-4 comic-font">
+        <h1 className="text-6xl font-bold text-black mb-4 jersey-font">
           🎨 <RainbowText>SOL PIXEL</RainbowText> 🎨
         </h1>
         <div className="bg-yellow-300 border-4 border-black p-4 inline-block">
@@ -467,6 +492,7 @@ export default function SolanaEternalCanvas() {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                onClick={handleCanvasClick}
                 onContextMenu={(e) => e.preventDefault()}
               />
             </div>
@@ -572,6 +598,7 @@ export default function SolanaEternalCanvas() {
                       <p>
                         POSITION: ({block.x}, {block.y})
                       </p>
+                      {block.url && <p className="text-blue-600 truncate">URL: {block.url}</p>}
                       <div className="flex gap-1 mt-1">
                         <Button
                           size="sm"

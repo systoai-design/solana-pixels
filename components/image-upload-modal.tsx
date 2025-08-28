@@ -16,13 +16,14 @@ interface PixelBlock {
   owner?: string
   imageUrl?: string
   color?: string
+  url?: string
 }
 
 interface ImageUploadModalProps {
   block: PixelBlock
   isOpen: boolean
   onClose: () => void
-  onImageUpload: (blockIndex: number, imageUrl: string) => void
+  onImageUpload: (blockIndex: number, imageUrl: string, url?: string) => void
   blockIndex: number
 }
 
@@ -31,6 +32,7 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [url, setUrl] = useState<string>(block.url || "")
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -112,12 +114,13 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
 
       // In a real implementation, you would upload to IPFS/Arweave here
       // For now, we'll use the resized data URL
-      onImageUpload(blockIndex, resizedImageUrl)
+      onImageUpload(blockIndex, resizedImageUrl, url.trim() || undefined)
 
       // Close modal
       onClose()
       setSelectedFile(null)
       setPreviewUrl(null)
+      setUrl("")
     } catch (error) {
       setUploadError("Failed to process image")
       console.error("[v0] Image upload error:", error)
@@ -189,6 +192,20 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
               }}
             />
 
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-black">Website URL (Optional):</label>
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://example.com"
+                className="w-full p-2 border-2 border-black text-sm"
+              />
+              <p className="text-xs text-gray-600">
+                Add a link to make your pixels clickable! Perfect for advertising.
+              </p>
+            </div>
+
             {uploadError && <Badge className="bg-red-500 text-white w-full justify-center">{uploadError}</Badge>}
 
             {/* Action Buttons */}
@@ -212,7 +229,7 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
                     Uploading...
                   </>
                 ) : (
-                  "Upload Image"
+                  "Upload & Save"
                 )}
               </Button>
             </div>

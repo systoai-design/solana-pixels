@@ -105,13 +105,26 @@ export default function SolanaEternalCanvas() {
   }, [pixelBlocks.length])
 
   useEffect(() => {
-    localStorage.removeItem("sol-pixel-blocks")
-    localStorage.removeItem("sol-pixel-last-update")
-    localStorage.removeItem("sol-pixel-update-data")
+    const hasInitialized = sessionStorage.getItem("sol-pixel-initialized")
 
-    // Initialize with empty canvas
-    setPixelBlocks([])
-    setTotalPixelsSold(0)
+    if (!hasInitialized) {
+      localStorage.removeItem("sol-pixel-blocks")
+      localStorage.removeItem("sol-pixel-last-update")
+      localStorage.removeItem("sol-pixel-update-data")
+      sessionStorage.setItem("sol-pixel-initialized", "true")
+
+      // Initialize with empty canvas
+      setPixelBlocks([])
+      setTotalPixelsSold(0)
+    } else {
+      // Load existing blocks if already initialized
+      const initialBlocks = loadPixelBlocksFromStorage()
+      if (initialBlocks.length > 0) {
+        setPixelBlocks(initialBlocks)
+        const totalPixels = initialBlocks.reduce((total, block) => total + block.width * block.height, 0)
+        setTotalPixelsSold(totalPixels)
+      }
+    }
 
     const syncInterval = setInterval(syncPixelBlocks, 2000) // Faster sync every 2 seconds
 
@@ -127,7 +140,7 @@ export default function SolanaEternalCanvas() {
       clearInterval(syncInterval)
       window.removeEventListener("sol-pixel-update", handleStorageUpdate as EventListener)
     }
-  }, [syncPixelBlocks])
+  }, []) // Remove syncPixelBlocks from dependency array to prevent infinite re-renders
 
   const handlePurchaseSuccess = (newBlock: PixelBlock) => {
     const updatedBlocks = [...pixelBlocks, newBlock]

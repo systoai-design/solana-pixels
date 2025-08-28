@@ -27,6 +27,8 @@
     --radius: 0px;
     --font-comic: "Comic Sans MS", cursive;
     --font-orbitron: "Courier New", monospace;
+    /* Added Jersey 10 font variable for headers */
+    --font-jersey: var(--font-jersey), "Jersey 10", cursive;
   }
 }
 
@@ -259,6 +261,12 @@
     font-weight: bold;
     padding: 4px;
     border: 2px solid #000000;
+  }
+
+  /* Added Jersey 10 font utility class for headers */
+  .jersey-font {
+    font-family: var(--font-jersey), "Jersey 10", cursive;
+    font-weight: 400;
   }
 
   /* Simple scrollbar styling */

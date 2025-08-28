@@ -2,7 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
-import { Comic_Neue, Orbitron } from "next/font/google"
+import { Comic_Neue, Orbitron, Jersey_10 } from "next/font/google"
 import { SolanaWalletProvider } from "@/components/wallet-provider"
 import "./globals.css"
 
@@ -20,6 +20,13 @@ const orbitron = Orbitron({
   display: "swap",
 })
 
+const jersey10 = Jersey_10({
+  subsets: ["latin"],
+  weight: ["400"],
+  variable: "--font-jersey",
+  display: "swap",
+})
+
 export const metadata: Metadata = {
   title: "Sol Pixel - Own 1M Pixels Forever on Solana",
   description:
@@ -33,7 +40,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${comicNeue.variable} ${orbitron.variable}`}>
+    <html lang="en" className={`${comicNeue.variable} ${orbitron.variable} ${jersey10.variable}`}>
       <head>
         <style>{`
 html {

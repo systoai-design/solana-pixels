@@ -536,7 +536,13 @@ export default function SolanaEternalCanvas() {
         finalUrl = "https://" + finalUrl
       }
 
-      window.open(finalUrl, "_blank", "noopener,noreferrer")
+      try {
+        window.open(finalUrl, "_blank", "noopener,noreferrer")
+      } catch (error) {
+        console.error("[v0] Failed to open URL:", error)
+        // Fallback: try to navigate in same window if popup fails
+        window.location.href = finalUrl
+      }
     }
   }
 

@@ -40,16 +40,10 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${comicNeue.variable} ${orbitron.variable} ${jersey10.variable}`}>
-      <head>
-        <style>{`
-html {
-  font-family: ${GeistSans.style.fontFamily};
-  --font-sans: ${GeistSans.variable};
-  --font-mono: ${GeistMono.variable};
-}
-        `}</style>
-      </head>
+    <html
+      lang="en"
+      className={`${GeistSans.variable} ${GeistMono.variable} ${comicNeue.variable} ${orbitron.variable} ${jersey10.variable}`}
+    >
       <body>
         <SolanaWalletProvider>{children}</SolanaWalletProvider>
       </body>

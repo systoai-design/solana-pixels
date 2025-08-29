@@ -940,7 +940,7 @@ export default function PixelCanvas() {
         <div className="mb-6">
           <img
             src="/sol-pixel-banner.png"
-            alt="Sol Pixel - 1M Pixel Banner"
+            alt="Sol Pixel - 1M Pixel Digital Advertising Canvas on Solana Blockchain"
             className="mx-auto max-w-full h-auto border-4 border-black shadow-lg"
             style={{ maxHeight: "200px" }}
           />
@@ -951,7 +951,7 @@ export default function PixelCanvas() {
         </h1>
         <div className="bg-yellow-300 border-4 border-black p-4 inline-block">
           <p className="text-black font-bold text-xl comic-font">
-            ⚡ <BlinkingText>OWN 1M PIXELS FOREVER</BlinkingText> ON THE BLOCKCHAIN! ⚡
+            ⚡ <BlinkingText>DIGITAL ADVERTISING CANVAS</BlinkingText> ON SOLANA BLOCKCHAIN! ⚡
           </p>
         </div>
 
@@ -974,7 +974,8 @@ export default function PixelCanvas() {
       </div>
 
       <ScrollingMarquee>
-        🚨 HOT! NEW PIXELS AVAILABLE! 🚨 BUY NOW BEFORE THEY'RE GONE! 🚨 BLOCKCHAIN SECURED! 🚨 UPLOAD ANYTIME! 🚨
+        🚨 PIXEL WARS ACTIVE! 🚨 UPLOAD IMAGES & LINKS! 🚨 HOVER MESSAGES! 🚨 REAL-TIME VISITORS! 🚨 BLOCKCHAIN SECURED!
+        🚨
       </ScrollingMarquee>
 
       <div className="mb-6">
@@ -1046,11 +1047,11 @@ export default function PixelCanvas() {
             <div className="space-y-3">
               <div className="bg-gray-200 p-3 border-2 border-black">
                 <p className="font-bold comic-font text-black text-lg">MIN SIZE: 10x10 PIXELS</p>
-                <p className="text-base text-black">PERFECT FOR LOGOS & ART!</p>
+                <p className="text-base text-black">PERFECT FOR ADS & BRANDING!</p>
               </div>
               <div className="bg-gray-200 p-3 border-2 border-black">
-                <p className="font-bold comic-font text-black text-lg">UPLOAD LATER!</p>
-                <p className="text-base text-black">BUY NOW, UPLOAD ANYTIME</p>
+                <p className="font-bold comic-font text-black text-lg">FULL AD FEATURES!</p>
+                <p className="text-base text-black">IMAGES, LINKS & HOVER MESSAGES</p>
               </div>
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">

@@ -39,10 +39,21 @@ const jersey10 = Jersey_10({
 })
 
 export const metadata: Metadata = {
-  title: "Sol Pixel - Own 1M Pixels Forever on Solana",
+  title: "Sol Pixel - Own 1M Pixels Forever on Solana Blockchain | Digital Advertising Canvas",
   description:
-    "Buy and own pixels forever on the Solana blockchain. 1,000,000 pixels available for 1 credit each. Upload your art anytime!",
+    "Buy and own pixels forever on the Solana blockchain. 1,000,000 pixels available at 100 credits each. Upload images, add links, create hover messages. Real-time visitor tracking and competitive pixel wars. Start your digital advertising campaign today!",
   generator: "v0.app",
+  keywords: "Solana, blockchain, pixels, digital advertising, NFT, crypto, canvas, pixel art, SOL, credits",
+  openGraph: {
+    title: "Sol Pixel - Own 1M Pixels Forever on Solana",
+    description: "Buy pixels on the Solana blockchain. Upload images, add links, create ads. 100 credits per pixel.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Sol Pixel - Own 1M Pixels Forever on Solana",
+    description: "Buy pixels on the Solana blockchain. Upload images, add links, create ads. 100 credits per pixel.",
+  },
 }
 
 export default function RootLayout({

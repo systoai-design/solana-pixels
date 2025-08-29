@@ -46,8 +46,46 @@ export default function SolanaEternalCanvas() {
   )
 
   const [newBlockNotification, setNewBlockNotification] = useState<string | null>(null)
+  const [lastNotifiedBlockCount, setLastNotifiedBlockCount] = useState(0)
 
   const isAdmin = connected && publicKey && publicKey.toString() === ADMIN_WALLET
+
+  const getOrCreateUser = async (walletAddress: string): Promise<string | null> => {
+    try {
+      const supabase = createClient()
+
+      const { data: existingUser, error: findError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("wallet_address", walletAddress)
+        .single()
+
+      if (existingUser && !findError) {
+        return existingUser.id
+      }
+
+      const { data: newUser, error: createError } = await supabase
+        .from("users")
+        .insert({
+          wallet_address: walletAddress,
+          username: walletAddress.slice(0, 8) + "...",
+          total_pixels_owned: 0,
+          total_spent: 0,
+        })
+        .select("id")
+        .single()
+
+      if (createError) {
+        console.error("[v0] Failed to create user:", createError)
+        return null
+      }
+
+      return newUser.id
+    } catch (error) {
+      console.error("[v0] Error in getOrCreateUser:", error)
+      return null
+    }
+  }
 
   const savePixelBlocksToDatabase = async (blocks: PixelBlock[]) => {
     try {
@@ -62,17 +100,32 @@ export default function SolanaEternalCanvas() {
         console.error("[v0] Failed to clear existing blocks:", deleteError)
       }
 
-      const blocksToInsert = blocks.map((block) => ({
-        start_x: block.x,
-        start_y: block.y,
-        width: block.width,
-        height: block.height,
-        owner_id: block.owner || "anonymous",
-        image_url: block.imageUrl || null,
-        link_url: block.url || null,
-        total_price: block.width * block.height * 0.005,
-        alt_text: `Pixel block at ${block.x},${block.y}`,
-      }))
+      const blocksToInsert = []
+
+      for (const block of blocks) {
+        let ownerId = null
+
+        if (block.owner && block.owner !== "anonymous") {
+          ownerId = await getOrCreateUser(block.owner)
+        }
+
+        if (!ownerId && block.owner && block.owner !== "anonymous") {
+          console.error("[v0] Skipping block - couldn't get user ID for:", block.owner)
+          continue
+        }
+
+        blocksToInsert.push({
+          start_x: block.x,
+          start_y: block.y,
+          width: block.width,
+          height: block.height,
+          owner_id: ownerId,
+          image_url: block.imageUrl || null,
+          link_url: block.url || null,
+          total_price: block.width * block.height * 0.005,
+          alt_text: `Pixel block at ${block.x},${block.y}`,
+        })
+      }
 
       if (blocksToInsert.length > 0) {
         const { error: insertError } = await supabase.from("pixel_blocks").insert(blocksToInsert)
@@ -83,7 +136,7 @@ export default function SolanaEternalCanvas() {
         }
       }
 
-      console.log("[v0] Successfully saved", blocks.length, "blocks to database")
+      console.log("[v0] Successfully saved", blocksToInsert.length, "blocks to database")
       return true
     } catch (error) {
       console.error("[v0] Database save error:", error)
@@ -95,7 +148,15 @@ export default function SolanaEternalCanvas() {
     try {
       const supabase = createClient()
 
-      const { data, error } = await supabase.from("pixel_blocks").select("*").order("created_at", { ascending: true })
+      const { data, error } = await supabase
+        .from("pixel_blocks")
+        .select(`
+          *,
+          users!pixel_blocks_owner_id_fkey (
+            wallet_address
+          )
+        `)
+        .order("created_at", { ascending: true })
 
       if (error) {
         console.error("[v0] Failed to load blocks from database:", error)
@@ -108,7 +169,7 @@ export default function SolanaEternalCanvas() {
         y: block.start_y,
         width: block.width,
         height: block.height,
-        owner: block.owner_id,
+        owner: block.users?.wallet_address || undefined,
         imageUrl: block.image_url || undefined,
         url: block.link_url || undefined,
         color: block.image_url ? undefined : "#" + Math.floor(Math.random() * 16777215).toString(16),
@@ -133,9 +194,10 @@ export default function SolanaEternalCanvas() {
         const totalPixels = databaseBlocks.reduce((total, block) => total + block.width * block.height, 0)
         setTotalPixelsSold(totalPixels)
 
-        if (databaseBlocks.length > pixelBlocks.length) {
-          const newBlocks = databaseBlocks.length - pixelBlocks.length
+        if (databaseBlocks.length > lastNotifiedBlockCount && databaseBlocks.length > 0) {
+          const newBlocks = databaseBlocks.length - lastNotifiedBlockCount
           setNewBlockNotification(`${newBlocks} new pixel block${newBlocks > 1 ? "s" : ""} purchased!`)
+          setLastNotifiedBlockCount(databaseBlocks.length)
           setTimeout(() => setNewBlockNotification(null), 3000)
         }
 
@@ -158,12 +220,13 @@ export default function SolanaEternalCanvas() {
     } catch (error) {
       console.error("[v0] Failed to sync from database:", error)
     }
-  }, [pixelBlocks.length])
+  }, [pixelBlocks.length, lastNotifiedBlockCount])
 
   useEffect(() => {
     const initializeCanvas = async () => {
       const initialBlocks = await loadPixelBlocksFromDatabase()
       setPixelBlocks(initialBlocks)
+      setLastNotifiedBlockCount(initialBlocks.length)
       const totalPixels = initialBlocks.reduce((total, block) => total + block.width * block.height, 0)
       setTotalPixelsSold(totalPixels)
       console.log("[v0] Initialized with", initialBlocks.length, "blocks from database")

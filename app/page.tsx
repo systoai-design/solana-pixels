@@ -91,18 +91,28 @@ export default function SolanaEternalCanvas() {
     try {
       const supabase = createClient()
 
-      const { error: deleteError } = await supabase
-        .from("pixel_blocks")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000")
+      // Only save new blocks that don't exist in database yet
+      const existingBlocks = await loadPixelBlocksFromDatabase()
+      const newBlocks = blocks.filter(
+        (block) =>
+          !existingBlocks.some(
+            (existing) =>
+              existing.x === block.x &&
+              existing.y === block.y &&
+              existing.width === block.width &&
+              existing.height === block.height &&
+              existing.owner === block.owner,
+          ),
+      )
 
-      if (deleteError) {
-        console.error("[v0] Failed to clear existing blocks:", deleteError)
+      if (newBlocks.length === 0) {
+        console.log("[v0] No new blocks to save")
+        return true
       }
 
       const blocksToInsert = []
 
-      for (const block of blocks) {
+      for (const block of newBlocks) {
         let ownerId = null
 
         if (block.owner && block.owner !== "anonymous") {
@@ -134,9 +144,10 @@ export default function SolanaEternalCanvas() {
           console.error("[v0] Failed to save blocks to database:", insertError)
           return false
         }
+
+        console.log("[v0] Successfully saved", blocksToInsert.length, "new blocks to database")
       }
 
-      console.log("[v0] Successfully saved", blocksToInsert.length, "blocks to database")
       return true
     } catch (error) {
       console.error("[v0] Database save error:", error)
@@ -242,10 +253,19 @@ export default function SolanaEternalCanvas() {
   }, [])
 
   const handlePurchaseSuccess = async (newBlock: PixelBlock) => {
+    console.log("[v0] Processing purchase success for:", newBlock.owner, "at", newBlock.x, newBlock.y)
+
     const updatedBlocks = [...pixelBlocks, newBlock]
     setPixelBlocks(updatedBlocks)
 
-    await savePixelBlocksToDatabase(updatedBlocks)
+    // Save to database for global sync
+    const saveSuccess = await savePixelBlocksToDatabase(updatedBlocks)
+
+    if (saveSuccess) {
+      console.log("[v0] Admin/user purchase successfully saved to database for global sync")
+    } else {
+      console.error("[v0] Failed to save purchase to database - will not sync globally")
+    }
 
     setTotalPixelsSold((prev) => prev + newBlock.width * newBlock.height)
     setSelectedArea(null)
@@ -259,8 +279,6 @@ export default function SolanaEternalCanvas() {
       },
       ...prev.slice(0, 4),
     ])
-
-    console.log("[v0] Real purchase completed and saved to database for worldwide sync")
   }
 
   const handleImageUpload = async (blockIndex: number, imageUrl: string, url?: string) => {
@@ -514,7 +532,14 @@ export default function SolanaEternalCanvas() {
     )
 
     if (clickedBlock && clickedBlock.url) {
-      window.open(clickedBlock.url, "_blank", "noopener,noreferrer")
+      let finalUrl = clickedBlock.url.trim()
+
+      // If URL doesn't start with http:// or https://, add https://
+      if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+        finalUrl = "https://" + finalUrl
+      }
+
+      window.open(finalUrl, "_blank", "noopener,noreferrer")
     }
   }
 

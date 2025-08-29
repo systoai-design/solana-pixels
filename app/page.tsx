@@ -12,6 +12,7 @@ import { PurchaseButton } from "@/components/purchase-button"
 import { ImageUploadModal } from "@/components/image-upload-modal"
 import { VisitorCounter, ScrollingMarquee, BlinkingText, RainbowText, RetroStats } from "@/components/retro-elements"
 import { createClient } from "@/lib/supabase/client"
+import Link from "next/link"
 
 interface PixelBlock {
   id?: string
@@ -51,25 +52,62 @@ export default function SolanaEternalCanvas() {
   const [newBlockNotification, setNewBlockNotification] = useState<string | null>(null)
   const [lastNotifiedBlockCount, setLastNotifiedBlockCount] = useState(0)
 
+  const [user, setUser] = useState<any>(null)
+  const [isAuthLoading, setIsAuthLoading] = useState(true)
+
   const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const supabase = createClient()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      setUser(session?.user || null)
+      setIsAuthLoading(false)
+
+      // Listen for auth changes
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((event, session) => {
+        setUser(session?.user || null)
+      })
+
+      return () => subscription.unsubscribe()
+    }
+
+    checkAuth()
+  }, [])
 
   const getOrCreateUser = async (walletAddress: string): Promise<string | null> => {
     try {
       const supabase = createClient()
 
+      // Check if user is authenticated
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser()
+      if (!authUser) {
+        console.error("[v0] User not authenticated")
+        return null
+      }
+
+      // Try to find existing user by auth ID first
       const { data: existingUser, error: findError } = await supabase
         .from("users")
         .select("id")
-        .eq("wallet_address", walletAddress)
+        .eq("id", authUser.id)
         .single()
 
       if (existingUser && !findError) {
         return existingUser.id
       }
 
+      // If not found by auth ID, create or update user record
       const { data: newUser, error: createError } = await supabase
         .from("users")
-        .insert({
+        .upsert({
+          id: authUser.id, // Use auth user ID
           wallet_address: walletAddress,
           username: walletAddress.slice(0, 8) + "...",
           total_pixels_owned: 0,
@@ -93,6 +131,14 @@ export default function SolanaEternalCanvas() {
   const savePixelBlockToDatabase = async (block: PixelBlock) => {
     try {
       const supabase = createClient()
+
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser()
+      if (!authUser) {
+        console.error("[v0] User not authenticated - cannot save pixel block")
+        return false
+      }
 
       let ownerId = null
 
@@ -285,6 +331,11 @@ export default function SolanaEternalCanvas() {
 
   const handlePurchaseSuccess = async (newBlock: PixelBlock) => {
     console.log("[v0] Processing purchase success for:", newBlock.owner, "at", newBlock.x, newBlock.y)
+
+    if (!user) {
+      console.error("[v0] User not authenticated - cannot process purchase")
+      return
+    }
 
     const saveSuccess = await savePixelBlockToDatabase(newBlock)
 
@@ -641,6 +692,17 @@ export default function SolanaEternalCanvas() {
         </div>
       )}
 
+      {!user && !isAuthLoading && (
+        <div className="fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 border-4 border-black shadow-lg">
+          <p className="font-bold text-sm">
+            <Link href="/auth/login" className="underline hover:text-yellow-300">
+              LOGIN REQUIRED
+            </Link>{" "}
+            to purchase pixels
+          </p>
+        </div>
+      )}
+
       <div className="text-center mb-8">
         <div className="mb-6">
           <img
@@ -667,6 +729,12 @@ export default function SolanaEternalCanvas() {
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-red-500 blink"></div>
               <span className="text-red-600 cyber-font text-sm font-bold">ADMIN MODE</span>
+            </div>
+          )}
+          {user && (
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+              <span className="text-green-600 cyber-font text-sm font-bold">AUTHENTICATED</span>
             </div>
           )}
         </div>
@@ -730,6 +798,23 @@ export default function SolanaEternalCanvas() {
           <Card className="p-4 bg-white border-4 border-black">
             <h3 className="font-bold text-xl mb-4 text-center comic-font text-black">🔗 CONNECT WALLET</h3>
             <WalletButton />
+            {!user && (
+              <div className="mt-2 p-2 bg-blue-200 border-2 border-black text-center">
+                <p className="text-black font-bold text-sm mb-2">🔐 AUTHENTICATION REQUIRED</p>
+                <div className="flex gap-2">
+                  <Link href="/auth/login" className="flex-1">
+                    <Button className="w-full text-xs bg-blue-500 hover:bg-blue-600 text-white border-2 border-black">
+                      LOGIN
+                    </Button>
+                  </Link>
+                  <Link href="/auth/sign-up" className="flex-1">
+                    <Button className="w-full text-xs bg-green-500 hover:bg-green-600 text-white border-2 border-black">
+                      SIGN UP
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            )}
             {isAdmin && (
               <div className="mt-2 p-2 bg-yellow-200 border-2 border-black text-center">
                 <p className="text-black font-bold text-sm">👑 ADMIN ACCESS 👑</p>
@@ -754,14 +839,25 @@ export default function SolanaEternalCanvas() {
                   <p className="text-base text-black">MINIMAL BLOCKCHAIN COST</p>
                 </div>
               )}
-              <PurchaseButton
-                selectedArea={selectedArea}
-                isValidSelection={isValidSelection}
-                onPurchaseSuccess={handlePurchaseSuccess}
-                isAdmin={isAdmin}
-                pixelBlocks={pixelBlocks}
-                onRetractPixels={handleRetractPixels}
-              />
+              {user ? (
+                <PurchaseButton
+                  selectedArea={selectedArea}
+                  isValidSelection={isValidSelection}
+                  onPurchaseSuccess={handlePurchaseSuccess}
+                  isAdmin={isAdmin}
+                  pixelBlocks={pixelBlocks}
+                  onRetractPixels={handleRetractPixels}
+                />
+              ) : (
+                <div className="p-3 bg-red-100 border-2 border-red-500 text-center">
+                  <p className="text-red-700 font-bold text-sm">LOGIN REQUIRED TO PURCHASE PIXELS</p>
+                  <Link href="/auth/login">
+                    <Button className="mt-2 bg-red-500 hover:bg-red-600 text-white border-2 border-black">
+                      LOGIN NOW
+                    </Button>
+                  </Link>
+                </div>
+              )}
             </div>
           </Card>
 

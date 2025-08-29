@@ -8,8 +8,17 @@ import { useState, useEffect } from "react"
 import { Connection, LAMPORTS_PER_SOL } from "@solana/web3.js"
 
 export function WalletButton() {
-  const { connected, publicKey, disconnect } = useWallet()
+  const { connected, publicKey, disconnect, connecting, wallet } = useWallet()
   const [balance, setBalance] = useState<number | null>(null)
+
+  useEffect(() => {
+    console.log("[v0] Wallet state changed:", {
+      connected,
+      connecting,
+      wallet: wallet?.adapter?.name,
+      publicKey: publicKey?.toString(),
+    })
+  }, [connected, connecting, wallet, publicKey])
 
   useEffect(() => {
     if (connected && publicKey) {
@@ -17,10 +26,12 @@ export function WalletButton() {
 
       const getBalance = async () => {
         try {
+          console.log("[v0] Fetching balance for:", publicKey.toString())
           const balance = await connection.getBalance(publicKey)
           setBalance(balance / LAMPORTS_PER_SOL)
+          console.log("[v0] Balance fetched:", balance / LAMPORTS_PER_SOL, "SOL")
         } catch (error) {
-          console.error("Error fetching balance:", error)
+          console.error("[v0] Error fetching balance:", error)
         }
       }
 
@@ -60,7 +71,17 @@ export function WalletButton() {
 
   return (
     <div className="wallet-adapter-button-trigger">
-      <WalletMultiButton className="!w-full !bg-blue-600 hover:!bg-blue-700 !text-white !font-bold !py-4 !px-6 !border-3 !border-black !shadow-lg !rounded-none !text-lg" />
+      <WalletMultiButton
+        className="!w-full !bg-blue-600 hover:!bg-blue-700 !text-white !font-bold !py-4 !px-6 !border-3 !border-black !shadow-lg !rounded-none !text-lg"
+        onClick={() => {
+          console.log("[v0] Wallet connect button clicked")
+        }}
+      />
+      {connecting && (
+        <div className="mt-2 text-center">
+          <Badge className="bg-yellow-500 text-black">🔄 CONNECTING...</Badge>
+        </div>
+      )}
     </div>
   )
 }

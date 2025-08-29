@@ -102,6 +102,7 @@ export default function SolanaEternalCanvas() {
         return false
       }
 
+      const pricePerPixel = isAdmin ? 0.00000001 : 0.005
       const blockToInsert = {
         start_x: block.x,
         start_y: block.y,
@@ -110,7 +111,7 @@ export default function SolanaEternalCanvas() {
         owner_id: ownerId,
         image_url: block.imageUrl || null,
         link_url: block.url || null,
-        total_price: block.width * block.height * 0.005,
+        total_price: block.width * block.height * pricePerPixel,
         alt_text: `Pixel block at ${block.x},${block.y}`,
       }
 
@@ -621,7 +622,11 @@ export default function SolanaEternalCanvas() {
 
   const retroStats = [
     { label: "PIXELS SOLD", value: totalPixelsSold.toLocaleString(), color: "text-red-600" },
-    { label: "SOL PER PIXEL", value: isAdmin ? "FREE" : "0.005", color: isAdmin ? "text-blue-600" : "text-green-600" },
+    {
+      label: "SOL PER PIXEL",
+      value: isAdmin ? "0.00000001" : "0.005",
+      color: isAdmin ? "text-blue-600" : "text-green-600",
+    },
     { label: "PIXELS LEFT", value: (1000000 - totalPixelsSold).toLocaleString(), color: "text-blue-600" },
   ]
 
@@ -704,7 +709,10 @@ export default function SolanaEternalCanvas() {
                     className={`text-lg px-4 py-2 ${isValidSelection ? "bg-green-500 text-white" : "bg-red-500 text-white"}`}
                   >
                     SELECTED: {selectedArea.width}x{selectedArea.height} PIXELS (COST:{" "}
-                    {isAdmin ? "FREE" : (selectedArea.width * selectedArea.height * 0.005).toFixed(3) + " SOL"})
+                    {isAdmin
+                      ? (selectedArea.width * selectedArea.height * 0.00000001).toFixed(8) + " SOL"
+                      : (selectedArea.width * selectedArea.height * 0.005).toFixed(3) + " SOL"}
+                    )
                   </Badge>
                   {!isValidSelection && hasOverlap(selectedArea) && (
                     <Badge className="bg-red-500 text-white blink text-lg px-4 py-2">⚠️ OVERLAPS EXISTING BLOCKS!</Badge>
@@ -739,8 +747,8 @@ export default function SolanaEternalCanvas() {
               </div>
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
-                  <p className="font-bold comic-font text-black text-lg">ADMIN: FREE PIXELS!</p>
-                  <p className="text-base text-black">NO CHARGES FOR ADMIN</p>
+                  <p className="font-bold comic-font text-black text-lg">ADMIN: 0.00000001 SOL/PIXEL!</p>
+                  <p className="text-base text-black">MINIMAL BLOCKCHAIN COST</p>
                 </div>
               )}
               <PurchaseButton

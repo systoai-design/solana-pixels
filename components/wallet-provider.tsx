@@ -16,11 +16,25 @@ export function SolanaWalletProvider({ children }: { children: React.ReactNode }
   const network = WalletAdapterNetwork.Devnet
   const endpoint = useMemo(() => clusterApiUrl(network), [network])
 
-  const wallets = useMemo(() => [new PhantomWalletAdapter(), new SolflareWalletAdapter()], [])
+  const wallets = useMemo(() => {
+    console.log("[v0] Initializing wallet adapters...")
+    const adapters = [new PhantomWalletAdapter(), new SolflareWalletAdapter()]
+    console.log(
+      "[v0] Available wallets:",
+      adapters.map((w) => w.name),
+    )
+    return adapters
+  }, [])
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect={false}>
+      <WalletProvider
+        wallets={wallets}
+        autoConnect={true}
+        onError={(error) => {
+          console.error("[v0] Wallet connection error:", error)
+        }}
+      >
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

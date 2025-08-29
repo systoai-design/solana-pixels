@@ -87,69 +87,97 @@ export default function SolanaEternalCanvas() {
     }
   }
 
-  const savePixelBlocksToDatabase = async (blocks: PixelBlock[]) => {
+  const savePixelBlockToDatabase = async (block: PixelBlock) => {
     try {
       const supabase = createClient()
 
-      const existingBlocks = await loadPixelBlocksFromDatabase()
-      const newBlocks = blocks.filter(
-        (block) =>
-          !existingBlocks.some(
-            (existing) =>
-              existing.x === block.x &&
-              existing.y === block.y &&
-              existing.width === block.width &&
-              existing.height === block.height &&
-              existing.owner === block.owner,
-          ),
-      )
+      let ownerId = null
 
-      if (newBlocks.length === 0) {
-        console.log("[v0] No new blocks to save")
-        return true
+      if (block.owner && block.owner !== "anonymous") {
+        ownerId = await getOrCreateUser(block.owner)
       }
 
-      const blocksToInsert = []
-
-      for (const block of newBlocks) {
-        let ownerId = null
-
-        if (block.owner && block.owner !== "anonymous") {
-          ownerId = await getOrCreateUser(block.owner)
-        }
-
-        if (!ownerId && block.owner && block.owner !== "anonymous") {
-          console.error("[v0] Skipping block - couldn't get user ID for:", block.owner)
-          continue
-        }
-
-        blocksToInsert.push({
-          start_x: block.x,
-          start_y: block.y,
-          width: block.width,
-          height: block.height,
-          owner_id: ownerId,
-          image_url: block.imageUrl || null,
-          link_url: block.url || null,
-          total_price: block.width * block.height * 0.005,
-          alt_text: `Pixel block at ${block.x},${block.y}`,
-        })
+      if (!ownerId && block.owner && block.owner !== "anonymous") {
+        console.error("[v0] Couldn't get user ID for:", block.owner)
+        return false
       }
 
-      if (blocksToInsert.length > 0) {
-        const { error: insertError } = await supabase.from("pixel_blocks").insert(blocksToInsert)
-
-        if (insertError) {
-          console.error("[v0] Failed to save blocks to database:", insertError)
-          return false
-        }
-
-        console.log("[v0] Successfully saved", blocksToInsert.length, "new blocks to database")
+      const blockToInsert = {
+        start_x: block.x,
+        start_y: block.y,
+        width: block.width,
+        height: block.height,
+        owner_id: ownerId,
+        image_url: block.imageUrl || null,
+        link_url: block.url || null,
+        total_price: block.width * block.height * 0.005,
+        alt_text: `Pixel block at ${block.x},${block.y}`,
       }
 
+      const { error: insertError } = await supabase.from("pixel_blocks").insert([blockToInsert])
+
+      if (insertError) {
+        console.error("[v0] Failed to save block to database:", insertError)
+        return false
+      }
+
+      console.log("[v0] Successfully saved new block to database")
       return true
     } catch (error) {
       console.error("[v0] Database save error:", error)
+      return false
+    }
+  }
+
+  const updatePixelBlockInDatabase = async (block: PixelBlock) => {
+    try {
+      const supabase = createClient()
+
+      const { error: updateError } = await supabase
+        .from("pixel_blocks")
+        .update({
+          image_url: block.imageUrl || null,
+          link_url: block.url || null,
+        })
+        .eq("start_x", block.x)
+        .eq("start_y", block.y)
+        .eq("width", block.width)
+        .eq("height", block.height)
+
+      if (updateError) {
+        console.error("[v0] Failed to update block in database:", updateError)
+        return false
+      }
+
+      console.log("[v0] Successfully updated block in database")
+      return true
+    } catch (error) {
+      console.error("[v0] Database update error:", error)
+      return false
+    }
+  }
+
+  const deletePixelBlockFromDatabase = async (block: PixelBlock) => {
+    try {
+      const supabase = createClient()
+
+      const { error: deleteError } = await supabase
+        .from("pixel_blocks")
+        .delete()
+        .eq("start_x", block.x)
+        .eq("start_y", block.y)
+        .eq("width", block.width)
+        .eq("height", block.height)
+
+      if (deleteError) {
+        console.error("[v0] Failed to delete block from database:", deleteError)
+        return false
+      }
+
+      console.log("[v0] Successfully deleted block from database")
+      return true
+    } catch (error) {
+      console.error("[v0] Database delete error:", error)
       return false
     }
   }
@@ -254,18 +282,18 @@ export default function SolanaEternalCanvas() {
   const handlePurchaseSuccess = async (newBlock: PixelBlock) => {
     console.log("[v0] Processing purchase success for:", newBlock.owner, "at", newBlock.x, newBlock.y)
 
-    const updatedBlocks = [...pixelBlocks, newBlock]
-    setPixelBlocks(updatedBlocks)
-
-    const saveSuccess = await savePixelBlocksToDatabase(updatedBlocks)
+    const saveSuccess = await savePixelBlockToDatabase(newBlock)
 
     if (saveSuccess) {
-      console.log("[v0] Admin/user purchase successfully saved to database for global sync")
+      console.log("[v0] Purchase successfully saved to database")
+      const updatedBlocks = [...pixelBlocks, newBlock]
+      setPixelBlocks(updatedBlocks)
+      setTotalPixelsSold((prev) => prev + newBlock.width * newBlock.height)
     } else {
-      console.error("[v0] Failed to save purchase to database - will not sync globally")
+      console.error("[v0] Failed to save purchase to database - not updating local state")
+      return
     }
 
-    setTotalPixelsSold((prev) => prev + newBlock.width * newBlock.height)
     setSelectedArea(null)
 
     const shortAddress = newBlock.owner?.slice(0, 8) + "..." || "Unknown"
@@ -280,64 +308,80 @@ export default function SolanaEternalCanvas() {
   }
 
   const handleImageUpload = async (blockIndex: number, imageUrl: string, url?: string) => {
-    setPixelBlocks((prev) => {
-      const updated = [...prev]
-      const globalIndex = prev.findIndex(
-        (block, i) =>
-          userBlocks[blockIndex] &&
-          block.x === userBlocks[blockIndex].x &&
-          block.y === userBlocks[blockIndex].y &&
-          block.owner === userBlocks[blockIndex].owner,
-      )
+    const blockToUpdate = userBlocks[blockIndex]
+    if (!blockToUpdate) return
 
-      if (globalIndex !== -1) {
-        updated[globalIndex] = {
-          ...updated[globalIndex],
-          imageUrl,
-          ...(url !== undefined && { url }),
+    const updatedBlock = {
+      ...blockToUpdate,
+      imageUrl,
+      ...(url !== undefined && { url }),
+    }
+
+    const updateSuccess = await updatePixelBlockInDatabase(updatedBlock)
+
+    if (updateSuccess) {
+      setPixelBlocks((prev) => {
+        const updated = [...prev]
+        const globalIndex = prev.findIndex(
+          (block) => block.x === blockToUpdate.x && block.y === blockToUpdate.y && block.owner === blockToUpdate.owner,
+        )
+
+        if (globalIndex !== -1) {
+          updated[globalIndex] = updatedBlock
         }
-        savePixelBlocksToDatabase(updated)
-      }
-      return updated
-    })
+        return updated
+      })
 
-    const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Unknown"
-    setRecentUpdates((prev) => [
-      {
-        user: shortAddress,
-        block: `${userBlocks[blockIndex]?.x},${userBlocks[blockIndex]?.y}`,
-        time: "Just now",
-      },
-      ...prev.slice(0, 4),
-    ])
+      const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Unknown"
+      setRecentUpdates((prev) => [
+        {
+          user: shortAddress,
+          block: `${blockToUpdate.x},${blockToUpdate.y}`,
+          time: "Just now",
+        },
+        ...prev.slice(0, 4),
+      ])
+    } else {
+      console.error("[v0] Failed to update image in database")
+    }
   }
 
   const handleRetractPixels = async (area: { x: number; y: number; width: number; height: number }) => {
-    setPixelBlocks((prev) => {
-      const filtered = prev.filter((block) => {
-        return !(
-          block.x < area.x + area.width &&
-          block.x + block.width > area.x &&
-          block.y < area.y + area.height &&
-          block.y + block.height > area.y
-        )
-      })
-      savePixelBlocksToDatabase(filtered)
-      return filtered
+    const blocksToRemove = pixelBlocks.filter((block) => {
+      return (
+        block.x < area.x + area.width &&
+        block.x + block.width > area.x &&
+        block.y < area.y + area.height &&
+        block.y + block.height > area.y
+      )
     })
 
-    const removedPixels = pixelBlocks
-      .filter((block) => {
-        return (
-          block.x < area.x + area.width &&
-          block.x + block.width > area.x &&
-          block.y < area.y + area.height &&
-          block.y + block.height > area.y
-        )
-      })
-      .reduce((total, block) => total + block.width * block.height, 0)
+    let allDeleted = true
+    for (const block of blocksToRemove) {
+      const deleteSuccess = await deletePixelBlockFromDatabase(block)
+      if (!deleteSuccess) {
+        allDeleted = false
+      }
+    }
 
-    setTotalPixelsSold((prev) => Math.max(0, prev - removedPixels))
+    if (allDeleted) {
+      setPixelBlocks((prev) => {
+        return prev.filter((block) => {
+          return !(
+            block.x < area.x + area.width &&
+            block.x + block.width > area.x &&
+            block.y < area.y + area.height &&
+            block.y + block.height > area.y
+          )
+        })
+      })
+
+      const removedPixels = blocksToRemove.reduce((total, block) => total + block.width * block.height, 0)
+      setTotalPixelsSold((prev) => Math.max(0, prev - removedPixels))
+    } else {
+      console.error("[v0] Failed to delete some blocks from database")
+    }
+
     setSelectedArea(null)
 
     const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
@@ -352,22 +396,26 @@ export default function SolanaEternalCanvas() {
   }
 
   const handleRetractIndividualBlock = async (blockToRemove: PixelBlock) => {
-    setPixelBlocks((prev) => {
-      const filtered = prev.filter(
-        (block) =>
-          !(
-            block.x === blockToRemove.x &&
-            block.y === blockToRemove.y &&
-            block.width === blockToRemove.width &&
-            block.height === blockToRemove.height &&
-            block.owner === blockToRemove.owner
-          ),
-      )
-      savePixelBlocksToDatabase(filtered)
-      return filtered
-    })
+    const deleteSuccess = await deletePixelBlockFromDatabase(blockToRemove)
 
-    setTotalPixelsSold((prev) => Math.max(0, prev - blockToRemove.width * blockToRemove.height))
+    if (deleteSuccess) {
+      setPixelBlocks((prev) => {
+        return prev.filter(
+          (block) =>
+            !(
+              block.x === blockToRemove.x &&
+              block.y === blockToRemove.y &&
+              block.width === blockToRemove.width &&
+              block.height === blockToRemove.height &&
+              block.owner === blockToRemove.owner
+            ),
+        )
+      })
+
+      setTotalPixelsSold((prev) => Math.max(0, prev - blockToRemove.width * blockToRemove.height))
+    } else {
+      console.error("[v0] Failed to delete block from database")
+    }
 
     const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
     setRecentUpdates((prev) => [

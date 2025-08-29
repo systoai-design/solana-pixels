@@ -6,6 +6,7 @@ import { useState, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
 import { X, Upload, Loader2 } from "lucide-react"
 
 interface PixelBlock {
@@ -23,7 +24,7 @@ interface ImageUploadModalProps {
   block: PixelBlock
   isOpen: boolean
   onClose: () => void
-  onImageUpload: (blockIndex: number, imageUrl: string, url?: string) => void
+  onImageUpload: (blockIndex: number, imageUrl: string, url?: string, message?: string) => void
   blockIndex: number
 }
 
@@ -33,8 +34,11 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [url, setUrl] = useState<string>(block.url || "")
+  const [message, setMessage] = useState<string>("")
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  const hasExistingImage = Boolean(block.imageUrl)
 
   const handleFileSelect = useCallback((file: File) => {
     // Validate file type
@@ -103,24 +107,29 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
   )
 
   const handleUpload = async () => {
-    if (!selectedFile || !previewUrl) return
+    if (!hasExistingImage && (!selectedFile || !previewUrl)) return
 
     setIsUploading(true)
     setUploadError(null)
 
     try {
-      // Resize image to fit block dimensions
-      const resizedImageUrl = await resizeImage(previewUrl)
+      let finalImageUrl = block.imageUrl // Use existing image by default
+
+      if (selectedFile && previewUrl) {
+        // Resize image to fit block dimensions
+        finalImageUrl = await resizeImage(previewUrl)
+      }
 
       // In a real implementation, you would upload to IPFS/Arweave here
-      // For now, we'll use the resized data URL
-      onImageUpload(blockIndex, resizedImageUrl, url.trim() || undefined)
+      // For now, we'll use the resized data URL or existing image
+      onImageUpload(blockIndex, finalImageUrl!, url.trim() || undefined, message.trim() || undefined)
 
       // Close modal
       onClose()
       setSelectedFile(null)
       setPreviewUrl(null)
       setUrl("")
+      setMessage("")
     } catch (error) {
       setUploadError("Failed to process image")
       console.error("[v0] Image upload error:", error)
@@ -136,7 +145,7 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
       <Card className="bg-white border-4 border-black shadow-2xl max-w-md w-full">
         <div className="p-6">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold">Upload Image</h3>
+            <h3 className="text-xl font-bold">{hasExistingImage ? "Edit Details" : "Upload Image"}</h3>
             <Button size="sm" variant="ghost" onClick={onClose} className="border-2 border-black">
               <X className="h-4 w-4" />
             </Button>
@@ -150,6 +159,23 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
               </p>
               <p className="text-xs">
                 Position: ({block.x}, {block.y})
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {hasExistingImage && (
+                <div className="mb-2">
+                  <p className="text-sm font-bold text-black">Current Image:</p>
+                  <img
+                    src={block.imageUrl || "/placeholder.svg"}
+                    alt="Current"
+                    className="max-w-full max-h-32 mx-auto pixel-perfect border-2 border-gray-300"
+                  />
+                </div>
+              )}
+
+              <p className="text-sm font-bold text-black">
+                {hasExistingImage ? "Change Image (Optional):" : "Upload Image:"}
               </p>
             </div>
 
@@ -173,7 +199,9 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
                 <div className="space-y-2">
                   <Upload className="h-8 w-8 mx-auto text-gray-400" />
                   <p className="text-sm text-gray-600">
-                    Drop an image here or click to select
+                    {hasExistingImage
+                      ? "Drop a new image here or click to select"
+                      : "Drop an image here or click to select"}
                     <br />
                     <span className="text-xs">PNG, JPG, GIF up to 5MB</span>
                   </p>
@@ -206,6 +234,21 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
               </p>
             </div>
 
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-black">Hover Message (Optional):</label>
+              <Textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Enter a message that appears when users hover over your ad..."
+                className="w-full p-2 border-2 border-black text-sm min-h-[80px] resize-none"
+                maxLength={200}
+              />
+              <p className="text-xs text-gray-600">
+                This message will appear when users hover over your pixel block. Max 200 characters.
+              </p>
+              <p className="text-xs text-gray-500">{message.length}/200 characters</p>
+            </div>
+
             {uploadError && <Badge className="bg-red-500 text-white w-full justify-center">{uploadError}</Badge>}
 
             {/* Action Buttons */}
@@ -220,7 +263,7 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
               </Button>
               <Button
                 onClick={handleUpload}
-                disabled={!selectedFile || isUploading}
+                disabled={(!hasExistingImage && !selectedFile) || isUploading}
                 className="flex-1 bg-purple-600 hover:bg-purple-700 text-white border-2 border-black"
               >
                 {isUploading ? (
@@ -228,6 +271,8 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Uploading...
                   </>
+                ) : hasExistingImage ? (
+                  "Save Changes"
                 ) : (
                   "Upload & Save"
                 )}

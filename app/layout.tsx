@@ -1,10 +1,21 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { GeistSans } from "geist/font/sans"
-import { GeistMono } from "geist/font/mono"
+import { Geist, Geist_Mono } from "next/font/google"
 import { Comic_Neue, Orbitron, Jersey_10 } from "next/font/google"
 import { SolanaWalletProvider } from "@/components/wallet-provider"
 import "./globals.css"
+
+const geistSans = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist-sans",
+  display: "swap",
+})
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+  display: "swap",
+})
 
 const comicNeue = Comic_Neue({
   subsets: ["latin"],
@@ -42,7 +53,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable} ${comicNeue.variable} ${orbitron.variable} ${jersey10.variable}`}
+      className={`${geistSans.variable} ${geistMono.variable} ${comicNeue.variable} ${orbitron.variable} ${jersey10.variable}`}
     >
       <body>
         <SolanaWalletProvider>{children}</SolanaWalletProvider>

@@ -6,7 +6,6 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { WalletButton } from "@/components/wallet-button"
 import { PurchaseButton } from "@/components/purchase-button"
 import { ImageUploadModal } from "@/components/image-upload-modal"
@@ -27,6 +26,7 @@ interface PixelBlock {
   color?: string
   url?: string
   transaction_signature?: string
+  alt_text?: string
 }
 
 const ADMIN_WALLETS = [
@@ -34,7 +34,7 @@ const ADMIN_WALLETS = [
   "BUbC5ugi4tnscNowHrNfvNsU5SZfMfcnBv7NotvdWyq8", // Added new admin wallet
 ]
 
-export default function SolanaEternalCanvas() {
+export default function PixelCanvas() {
   const { connected, publicKey } = useWallet()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -68,6 +68,9 @@ export default function SolanaEternalCanvas() {
 
   const [isSyncing, setIsSyncing] = useState(false)
   const [lastSyncTime, setLastSyncTime] = useState(0)
+
+  const [hoveredBlock, setHoveredBlock] = useState<PixelBlock | null>(null)
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
 
   const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
 
@@ -180,6 +183,7 @@ export default function SolanaEternalCanvas() {
         .update({
           image_url: block.imageUrl || null,
           link_url: block.url || null,
+          alt_text: block.alt_text || null,
         })
         .eq("start_x", block.x)
         .eq("start_y", block.y)
@@ -255,6 +259,7 @@ export default function SolanaEternalCanvas() {
         url: block.link_url || undefined,
         color: block.image_url ? undefined : "#" + Math.floor(Math.random() * 16777215).toString(16),
         transaction_signature: block.transaction_signature || undefined,
+        alt_text: block.alt_text || undefined,
       }))
 
       console.log("[v0] Successfully loaded", blocks.length, "blocks from database")
@@ -368,7 +373,7 @@ export default function SolanaEternalCanvas() {
     ])
   }
 
-  const handleImageUpload = async (blockIndex: number, imageUrl: string, url?: string) => {
+  const handleImageUpload = async (blockIndex: number, imageUrl: string, url?: string, message?: string) => {
     const blockToUpdate = userBlocks[blockIndex]
     if (!blockToUpdate) return
 
@@ -376,6 +381,7 @@ export default function SolanaEternalCanvas() {
       ...blockToUpdate,
       imageUrl,
       ...(url !== undefined && { url }),
+      ...(message !== undefined && { alt_text: message }),
     }
 
     const updateSuccess = await updatePixelBlockInDatabase(updatedBlock)
@@ -393,17 +399,13 @@ export default function SolanaEternalCanvas() {
         return updated
       })
 
-      const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Unknown"
-      setRecentUpdates((prev) => [
-        {
-          user: shortAddress,
-          block: `${blockToUpdate.x},${blockToUpdate.y}`,
-          time: "Just now",
-        },
-        ...prev.slice(0, 4),
-      ])
-    } else {
-      console.error("[v0] Failed to update image in database")
+      setUserBlocks((prev) => {
+        const updated = [...prev]
+        updated[blockIndex] = updatedBlock
+        return updated
+      })
+
+      console.log("[v0] Image uploaded successfully for block:", updatedBlock)
     }
   }
 
@@ -711,6 +713,25 @@ export default function SolanaEternalCanvas() {
         width: snappedWidth,
         height: snappedHeight,
       })
+    } else {
+      const coords = getCanvasCoordinates(e)
+      const hoveredBlock = pixelBlocks.find(
+        (block) =>
+          coords.x >= block.x &&
+          coords.x < block.x + block.width &&
+          coords.y >= block.y &&
+          coords.y < block.y + block.height &&
+          block.imageUrl && // Only show tooltip for blocks with images
+          block.alt_text, // Only show tooltip if there's a message
+      )
+
+      if (hoveredBlock) {
+        setHoveredBlock(hoveredBlock)
+        setTooltipPosition({ x: e.clientX, y: e.clientY })
+      } else {
+        setHoveredBlock(null)
+        setTooltipPosition(null)
+      }
     }
   }
 
@@ -756,6 +777,11 @@ export default function SolanaEternalCanvas() {
         }
       }
     }
+  }
+
+  const handleMouseLeave = () => {
+    setHoveredBlock(null)
+    setTooltipPosition(null)
   }
 
   useEffect(() => {
@@ -853,7 +879,7 @@ export default function SolanaEternalCanvas() {
   }
 
   return (
-    <div className="min-h-screen bg-white p-4">
+    <div className="min-h-screen bg-gray-100 p-4">
       {newBlockNotification && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-yellow-400 text-black px-6 py-3 border-4 border-black shadow-lg">
           <p className="font-bold comic-font text-center">🔥 {newBlockNotification} 🔥</p>
@@ -932,31 +958,12 @@ export default function SolanaEternalCanvas() {
                 onMouseUp={handleMouseUp}
                 onClick={handleCanvasClick}
                 onContextMenu={(e) => e.preventDefault()}
+                onMouseLeave={handleMouseLeave}
               />
             </div>
 
-            <div className="mt-4 text-center">
-              <p className="text-lg text-black mb-2 cyber-font font-bold">CLICK AND DRAG TO SELECT PIXELS</p>
-              {selectedArea && (
-                <div className="flex justify-center gap-2">
-                  <Badge
-                    className={`text-lg px-4 py-2 ${isValidSelection ? "bg-green-500 text-white" : "bg-red-500 text-white"}`}
-                  >
-                    SELECTED: {selectedArea.width}x{selectedArea.height} PIXELS (COST:{" "}
-                    {isAdmin
-                      ? Math.ceil(selectedArea.width * selectedArea.height * 0.1) + " CREDITS"
-                      : selectedArea.width * selectedArea.height * 100 + " CREDITS"}
-                    {" ≈ "}
-                    {isAdmin
-                      ? creditsToSol(Math.ceil(selectedArea.width * selectedArea.height * 0.1)) + " SOL"
-                      : creditsToSol(selectedArea.width * selectedArea.height * 100) + " SOL"}
-                    )
-                  </Badge>
-                  {!isValidSelection && hasOverlap(selectedArea) && (
-                    <Badge className="bg-red-500 text-white blink text-lg px-4 py-2">⚠️ OVERLAPS EXISTING BLOCKS!</Badge>
-                  )}
-                </div>
-              )}
+            <div className="bg-gray-200 text-center py-2 border-t-4 border-black">
+              <p className="font-bold text-black">CLICK AND DRAG TO SELECT PIXELS</p>
             </div>
           </Card>
         </div>
@@ -1082,7 +1089,7 @@ export default function SolanaEternalCanvas() {
                           className="retro-button text-xs flex-1"
                           onClick={() => openUploadModal(block, i)}
                         >
-                          {block.imageUrl ? "CHANGE IMAGE" : "UPLOAD IMAGE"}
+                          {block.imageUrl ? "CHANGE DETAILS" : "UPLOAD DETAILS"}
                         </Button>
                         {isAdmin && (
                           <Button
@@ -1152,6 +1159,20 @@ export default function SolanaEternalCanvas() {
           currentUsername={currentUsername}
           onUsernameUpdate={setCurrentUsername}
         />
+      )}
+
+      {hoveredBlock && tooltipPosition && (
+        <div
+          className="fixed z-50 bg-black text-white p-3 rounded-lg shadow-lg max-w-xs pointer-events-none"
+          style={{
+            left: tooltipPosition.x + 10,
+            top: tooltipPosition.y - 10,
+            transform: "translateY(-100%)",
+          }}
+        >
+          <p className="text-sm font-medium">{hoveredBlock.alt_text}</p>
+          {hoveredBlock.url && <p className="text-xs text-gray-300 mt-1">Click to visit: {hoveredBlock.url}</p>}
+        </div>
       )}
     </div>
   )

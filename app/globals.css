@@ -25,7 +25,7 @@
     --input: #ffffff;
     --ring: rgba(0, 0, 255, 0.3);
     --radius: 0px;
-    /* Fixed font variable configuration for proper Next.js font loading */
+    /* Updated font variable configuration to match layout.tsx exactly */
     --font-sans: var(--font-geist-sans);
     --font-mono: var(--font-geist-mono);
     --font-comic: var(--font-comic);
@@ -150,7 +150,8 @@
   body {
     background-color: #ffffff;
     color: #000000;
-    font-family: var(--font-comic), "Comic Sans MS", cursive;
+    /* Updated body font to use proper font variable fallback */
+    font-family: var(--font-comic), var(--font-sans), "Comic Sans MS", cursive;
   }
 
   /* Simple retro animations without glow effects */
@@ -265,9 +266,9 @@
     border: 2px solid #000000;
   }
 
-  /* Updated Jersey 10 font utility class to use proper CSS variable */
+  /* Updated Jersey 10 font utility class with better fallbacks */
   .jersey-font {
-    font-family: var(--font-jersey), "Jersey 10", cursive;
+    font-family: var(--font-jersey), "Jersey 10", "Impact", "Arial Black", sans-serif;
     font-weight: 400;
   }
 

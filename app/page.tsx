@@ -66,6 +66,9 @@ export default function SolanaEternalCanvas() {
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
   const [isRetracting, setIsRetracting] = useState(false)
 
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [lastSyncTime, setLastSyncTime] = useState(0)
+
   const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
 
   useEffect(() => {
@@ -263,6 +266,11 @@ export default function SolanaEternalCanvas() {
   }
 
   const syncPixelBlocks = useCallback(async () => {
+    if (isSyncing || Date.now() - lastSyncTime < 2000) {
+      return
+    }
+
+    setIsSyncing(true)
     try {
       const databaseBlocks = await loadPixelBlocksFromDatabase()
 
@@ -298,8 +306,11 @@ export default function SolanaEternalCanvas() {
       }
     } catch (error) {
       console.error("[v0] Failed to sync from database:", error)
+    } finally {
+      setIsSyncing(false)
+      setLastSyncTime(Date.now())
     }
-  }, [pixelBlocks.length, lastNotifiedBlockCount])
+  }, [pixelBlocks.length, lastNotifiedBlockCount, isSyncing, lastSyncTime])
 
   useEffect(() => {
     const initializeCanvas = async () => {
@@ -313,7 +324,7 @@ export default function SolanaEternalCanvas() {
 
     initializeCanvas()
 
-    const syncInterval = setInterval(syncPixelBlocks, 3000)
+    const syncInterval = setInterval(syncPixelBlocks, 5000)
 
     return () => {
       clearInterval(syncInterval)
@@ -335,6 +346,10 @@ export default function SolanaEternalCanvas() {
       const updatedBlocks = [...pixelBlocks, newBlock]
       setPixelBlocks(updatedBlocks)
       setTotalPixelsSold((prev) => prev + newBlock.width * newBlock.height)
+
+      setTimeout(() => {
+        syncPixelBlocks()
+      }, 1000)
     } else {
       console.error("[v0] Failed to save purchase to database - not updating local state")
       return
@@ -572,35 +587,19 @@ export default function SolanaEternalCanvas() {
       const isOwnedByCurrentUser = connected && publicKey && block.owner === publicKey.toString()
 
       if (block.imageUrl) {
-        // STATE: Owned block with image (advertisement)
         const img = new Image()
         img.crossOrigin = "anonymous"
         img.onload = () => {
-          // Draw the advertisement image
+          // Draw the advertisement image - fill the entire block area
           ctx.drawImage(img, block.x, block.y, block.width, block.height)
 
-          // Add border to indicate it's owned
-          ctx.strokeStyle = isOwnedByCurrentUser ? "#22c55e" : "#3b82f6" // Green for user-owned, blue for others
-          ctx.lineWidth = 3
-          ctx.strokeRect(block.x, block.y, block.width, block.height)
-
-          if (!isOwnedByCurrentUser) {
-            // Show owner username for other people's blocks
-            loadBlockOwnerUsername(block.owner || "").then((username) => {
-              ctx.fillStyle = "rgba(59, 130, 246, 0.9)"
-              ctx.fillRect(block.x, block.y + block.height - 20, Math.min(username.length * 8, block.width), 20)
-              ctx.fillStyle = "#ffffff"
-              ctx.font = "10px monospace"
-              ctx.fillText(username, block.x + 2, block.y + block.height - 6)
-            })
-          } else {
-            // Add "YOUR AD" label for user-owned blocks
-            ctx.fillStyle = "rgba(34, 197, 94, 0.9)"
-            ctx.fillRect(block.x, block.y, Math.min(60, block.width), 20)
-            ctx.fillStyle = "#ffffff"
-            ctx.font = "12px monospace"
-            ctx.fillText("YOUR AD", block.x + 2, block.y + 14)
+          // Add subtle border to indicate it's owned (only for user's own blocks)
+          if (isOwnedByCurrentUser) {
+            ctx.strokeStyle = "#22c55e" // Green border for user-owned blocks
+            ctx.lineWidth = 2
+            ctx.strokeRect(block.x, block.y, block.width, block.height)
           }
+          // No text overlays - keep images clean for advertising
         }
         img.src = block.imageUrl
       } else {
@@ -733,7 +732,8 @@ export default function SolanaEternalCanvas() {
     )
 
     if (clickedBlock) {
-      if (clickedBlock.url) {
+      if (clickedBlock.imageUrl && clickedBlock.url) {
+        // If block has both image and URL, open the linked website
         let finalUrl = clickedBlock.url.trim()
 
         if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
@@ -747,6 +747,7 @@ export default function SolanaEternalCanvas() {
           console.error("[v0] Failed to open advertisement URL:", error)
         }
       } else {
+        // If no URL or no image, allow upload for owned blocks
         const isOwnedByCurrentUser = connected && publicKey && clickedBlock.owner === publicKey.toString()
         if (isOwnedByCurrentUser) {
           const blockIndex = pixelBlocks.findIndex((b) => b.id === clickedBlock.id)
@@ -924,11 +925,12 @@ export default function SolanaEternalCanvas() {
             >
               <canvas
                 ref={canvasRef}
-                className="border border-gray-300 cursor-crosshair bg-pink-50"
+                className="border border-gray-300 cursor-pointer bg-pink-50"
                 style={{ height: "1000px", maxHeight: "1000px" }}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
+                onClick={handleCanvasClick}
                 onContextMenu={(e) => e.preventDefault()}
               />
             </div>

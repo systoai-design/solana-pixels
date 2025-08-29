@@ -25,7 +25,10 @@ interface PixelBlock {
   url?: string
 }
 
-const ADMIN_WALLET = "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS"
+const ADMIN_WALLETS = [
+  "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS", // Original admin
+  "BUbC5ugi4tnscNowHrNfvNsU5SZfMfcnBv7NotvdWyq8", // Added new admin wallet
+]
 
 export default function SolanaEternalCanvas() {
   const { connected, publicKey } = useWallet()
@@ -48,7 +51,7 @@ export default function SolanaEternalCanvas() {
   const [newBlockNotification, setNewBlockNotification] = useState<string | null>(null)
   const [lastNotifiedBlockCount, setLastNotifiedBlockCount] = useState(0)
 
-  const isAdmin = connected && publicKey && publicKey.toString() === ADMIN_WALLET
+  const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
 
   const getOrCreateUser = async (walletAddress: string): Promise<string | null> => {
     try {

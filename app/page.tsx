@@ -91,7 +91,6 @@ export default function SolanaEternalCanvas() {
     try {
       const supabase = createClient()
 
-      // Only save new blocks that don't exist in database yet
       const existingBlocks = await loadPixelBlocksFromDatabase()
       const newBlocks = blocks.filter(
         (block) =>
@@ -258,7 +257,6 @@ export default function SolanaEternalCanvas() {
     const updatedBlocks = [...pixelBlocks, newBlock]
     setPixelBlocks(updatedBlocks)
 
-    // Save to database for global sync
     const saveSuccess = await savePixelBlocksToDatabase(updatedBlocks)
 
     if (saveSuccess) {
@@ -534,7 +532,6 @@ export default function SolanaEternalCanvas() {
     if (clickedBlock && clickedBlock.url) {
       let finalUrl = clickedBlock.url.trim()
 
-      // If URL doesn't start with http:// or https://, add https://
       if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
         finalUrl = "https://" + finalUrl
       }

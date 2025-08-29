@@ -296,7 +296,7 @@ export default function PixelCanvas() {
         const totalPixels = databaseBlocks.reduce((total, block) => total + block.width * block.height, 0)
         setTotalPixelsSold(totalPixels)
 
-        if (databaseBlocks.length > lastNotifiedBlockCount && databaseBlocks.length > 0) {
+        if (databaseBlocks.length > lastNotifiedBlockCount && lastNotifiedBlockCount > 0) {
           const newBlocks = databaseBlocks.slice(lastNotifiedBlockCount)
           const otherUserBlocks = newBlocks.filter(
             (block) =>
@@ -304,7 +304,13 @@ export default function PixelCanvas() {
           )
 
           if (otherUserBlocks.length > 0) {
-            const notificationKey = `${Date.now()}-${otherUserBlocks.length}`
+            // Use a more specific notification key based on actual block data
+            const blockIds = otherUserBlocks
+              .map((block) => `${block.x}-${block.y}-${block.owner}`)
+              .sort()
+              .join(",")
+            const notificationKey = `blocks-${blockIds}`
+
             if (!shownNotifications.has(notificationKey)) {
               setNewBlockNotification(
                 `${otherUserBlocks.length} new pixel block${otherUserBlocks.length > 1 ? "s" : ""} purchased!`,
@@ -319,14 +325,6 @@ export default function PixelCanvas() {
               )
               setTimeout(() => {
                 setNewBlockNotification(null)
-                // Clean up old notifications after 10 seconds
-                setTimeout(() => {
-                  setShownNotifications((prev) => {
-                    const newSet = new Set(prev)
-                    newSet.delete(notificationKey)
-                    return newSet
-                  })
-                }, 10000)
               }, 3000)
             }
           }

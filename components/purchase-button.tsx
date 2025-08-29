@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useWallet, useConnection } from "@solana/wallet-adapter-react"
-import { PublicKey } from "@solana/web3.js"
+import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
@@ -27,6 +27,7 @@ interface PurchaseButtonProps {
     height: number
     owner: string
     color: string
+    transaction_signature?: string
   }) => void
   onRetractPixels?: (area: { x: number; y: number; width: number; height: number }) => void
 }
@@ -84,13 +85,34 @@ export function PurchaseButton({
     try {
       const pixelCount = selectedArea.width * selectedArea.height
       const costInSOL = isAdmin ? pixelCount * 0.00000001 : pixelCount * 0.005
+      const costInLamports = Math.floor(costInSOL * LAMPORTS_PER_SOL)
 
       console.log(`[v0] Starting purchase for ${pixelCount} pixels, cost: ${costInSOL} SOL`)
 
-      // For now, skip blockchain transaction and just save to database
-      // This ensures the ownership system works reliably
-      console.log(`[v0] Simulating blockchain transaction...`)
-      await new Promise((resolve) => setTimeout(resolve, 1000)) // Simulate transaction time
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: publicKey,
+          toPubkey: TREASURY_WALLET,
+          lamports: costInLamports,
+        }),
+      )
+
+      // Get recent blockhash
+      const { blockhash } = await connection.getLatestBlockhash()
+      transaction.recentBlockhash = blockhash
+      transaction.feePayer = publicKey
+
+      console.log(`[v0] Sending ${costInSOL} SOL to treasury wallet...`)
+
+      const signature = await sendTransaction(transaction, connection)
+
+      console.log(`[v0] Transaction sent, signature: ${signature}`)
+      console.log(`[v0] Confirming transaction...`)
+
+      // Wait for confirmation
+      await connection.confirmTransaction(signature, "confirmed")
+
+      console.log(`[v0] Transaction confirmed!`)
 
       const colors = ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#ffa500", "#800080"]
       const randomColor = colors[Math.floor(Math.random() * colors.length)]
@@ -102,6 +124,7 @@ export function PurchaseButton({
         height: selectedArea.height,
         owner: publicKey.toString(),
         color: randomColor,
+        transaction_signature: signature, // Use real transaction signature
       }
 
       console.log(`[v0] Purchase successful! Block created:`, newBlock)

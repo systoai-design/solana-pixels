@@ -10,9 +10,10 @@ import { Badge } from "@/components/ui/badge"
 import { WalletButton } from "@/components/wallet-button"
 import { PurchaseButton } from "@/components/purchase-button"
 import { ImageUploadModal } from "@/components/image-upload-modal"
+import { CreditsDisplay } from "@/components/credits-display"
+import { TopupModal } from "@/components/topup-modal"
 import { VisitorCounter, ScrollingMarquee, BlinkingText, RainbowText, RetroStats } from "@/components/retro-elements"
 import { createClient } from "@/lib/supabase/client"
-import Link from "next/link"
 
 interface PixelBlock {
   id?: string
@@ -24,6 +25,7 @@ interface PixelBlock {
   imageUrl?: string
   color?: string
   url?: string
+  transaction_signature?: string
 }
 
 const ADMIN_WALLETS = [
@@ -54,77 +56,58 @@ export default function SolanaEternalCanvas() {
 
   const [user, setUser] = useState<any>(null)
   const [isAuthLoading, setIsAuthLoading] = useState(true)
+  const [userCredits, setUserCredits] = useState(0)
+  const [topupModalOpen, setTopupModalOpen] = useState(false)
 
   const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const supabase = createClient()
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      setUser(session?.user || null)
-      setIsAuthLoading(false)
-
-      // Listen for auth changes
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((event, session) => {
-        setUser(session?.user || null)
-      })
-
-      return () => subscription.unsubscribe()
+    if (connected && publicKey) {
+      setUser({ id: publicKey.toString(), wallet_address: publicKey.toString() })
+      loadUserCredits(publicKey.toString()).then(setUserCredits)
+    } else {
+      setUser(null)
+      setUserCredits(0)
     }
-
-    checkAuth()
-  }, [])
+    setIsAuthLoading(false)
+  }, [connected, publicKey])
 
   const getOrCreateUser = async (walletAddress: string): Promise<string | null> => {
     try {
       const supabase = createClient()
 
-      // Check if user is authenticated
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
-      if (!authUser) {
-        console.error("[v0] User not authenticated")
-        return null
-      }
-
-      // Try to find existing user by auth ID first
       const { data: existingUser, error: findError } = await supabase
         .from("users")
         .select("id")
-        .eq("id", authUser.id)
+        .eq("wallet_address", walletAddress)
         .single()
 
       if (existingUser && !findError) {
         return existingUser.id
       }
 
-      // If not found by auth ID, create or update user record
       const { data: newUser, error: createError } = await supabase
         .from("users")
-        .upsert({
-          id: authUser.id, // Use auth user ID
+        .insert({
+          id: walletAddress,
           wallet_address: walletAddress,
           username: walletAddress.slice(0, 8) + "...",
           total_pixels_owned: 0,
           total_spent: 0,
+          credits: 0,
         })
         .select("id")
         .single()
 
       if (createError) {
         console.error("[v0] Failed to create user:", createError)
-        return null
+        return walletAddress
       }
 
       return newUser.id
     } catch (error) {
       console.error("[v0] Error in getOrCreateUser:", error)
-      return null
+      return walletAddress
     }
   }
 
@@ -132,26 +115,22 @@ export default function SolanaEternalCanvas() {
     try {
       const supabase = createClient()
 
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
-      if (!authUser) {
-        console.error("[v0] User not authenticated - cannot save pixel block")
+      if (!block.owner || block.owner === "anonymous") {
+        console.error("[v0] No owner specified for pixel block")
         return false
       }
 
-      let ownerId = null
+      const ownerId = await getOrCreateUser(block.owner)
 
-      if (block.owner && block.owner !== "anonymous") {
-        ownerId = await getOrCreateUser(block.owner)
-      }
-
-      if (!ownerId && block.owner && block.owner !== "anonymous") {
+      if (!ownerId) {
         console.error("[v0] Couldn't get user ID for:", block.owner)
         return false
       }
 
       const pricePerPixel = isAdmin ? 0.00000001 : 0.005
+      const transactionSignature =
+        block.transaction_signature || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
+
       const blockToInsert = {
         start_x: block.x,
         start_y: block.y,
@@ -162,6 +141,7 @@ export default function SolanaEternalCanvas() {
         link_url: block.url || null,
         total_price: block.width * block.height * pricePerPixel,
         alt_text: `Pixel block at ${block.x},${block.y}`,
+        transaction_signature: transactionSignature,
       }
 
       const { error: insertError } = await supabase.from("pixel_blocks").insert([blockToInsert])
@@ -171,7 +151,7 @@ export default function SolanaEternalCanvas() {
         return false
       }
 
-      console.log("[v0] Successfully saved new block to database")
+      console.log("[v0] Successfully saved new block to database with transaction:", transactionSignature)
       return true
     } catch (error) {
       console.error("[v0] Database save error:", error)
@@ -261,6 +241,7 @@ export default function SolanaEternalCanvas() {
         imageUrl: block.image_url || undefined,
         url: block.link_url || undefined,
         color: block.image_url ? undefined : "#" + Math.floor(Math.random() * 16777215).toString(16),
+        transaction_signature: block.transaction_signature || undefined,
       }))
 
       console.log("[v0] Successfully loaded", blocks.length, "blocks from database")
@@ -332,8 +313,8 @@ export default function SolanaEternalCanvas() {
   const handlePurchaseSuccess = async (newBlock: PixelBlock) => {
     console.log("[v0] Processing purchase success for:", newBlock.owner, "at", newBlock.x, newBlock.y)
 
-    if (!user) {
-      console.error("[v0] User not authenticated - cannot process purchase")
+    if (!connected || !publicKey) {
+      console.error("[v0] Wallet not connected - cannot process purchase")
       return
     }
 
@@ -643,7 +624,6 @@ export default function SolanaEternalCanvas() {
         window.open(finalUrl, "_blank", "noopener,noreferrer")
       } catch (error) {
         console.error("[v0] Failed to open URL:", error)
-        // Fallback: try to navigate in same window if popup fails
         window.location.href = finalUrl
       }
     }
@@ -684,6 +664,27 @@ export default function SolanaEternalCanvas() {
     { label: "PIXELS LEFT", value: (1000000 - totalPixelsSold).toLocaleString(), color: "text-blue-600" },
   ]
 
+  const loadUserCredits = async (walletAddress: string) => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("users")
+        .select("credits")
+        .eq("wallet_address", walletAddress)
+        .single()
+
+      if (error) {
+        console.error("[v0] Failed to load user credits:", error)
+        return 0
+      }
+
+      return data?.credits || 0
+    } catch (error) {
+      console.error("[v0] Error loading credits:", error)
+      return 0
+    }
+  }
+
   return (
     <div className="min-h-screen bg-white p-4">
       {newBlockNotification && (
@@ -692,14 +693,9 @@ export default function SolanaEternalCanvas() {
         </div>
       )}
 
-      {!user && !isAuthLoading && (
+      {!connected && (
         <div className="fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 border-4 border-black shadow-lg">
-          <p className="font-bold text-sm">
-            <Link href="/auth/login" className="underline hover:text-yellow-300">
-              LOGIN REQUIRED
-            </Link>{" "}
-            to purchase pixels
-          </p>
+          <p className="font-bold text-sm">CONNECT WALLET TO PURCHASE PIXELS</p>
         </div>
       )}
 
@@ -731,10 +727,10 @@ export default function SolanaEternalCanvas() {
               <span className="text-red-600 cyber-font text-sm font-bold">ADMIN MODE</span>
             </div>
           )}
-          {user && (
+          {connected && (
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-green-500"></div>
-              <span className="text-green-600 cyber-font text-sm font-bold">AUTHENTICATED</span>
+              <span className="text-green-600 cyber-font text-sm font-bold">WALLET CONNECTED</span>
             </div>
           )}
         </div>
@@ -798,21 +794,9 @@ export default function SolanaEternalCanvas() {
           <Card className="p-4 bg-white border-4 border-black">
             <h3 className="font-bold text-xl mb-4 text-center comic-font text-black">🔗 CONNECT WALLET</h3>
             <WalletButton />
-            {!user && (
-              <div className="mt-2 p-2 bg-blue-200 border-2 border-black text-center">
-                <p className="text-black font-bold text-sm mb-2">🔐 AUTHENTICATION REQUIRED</p>
-                <div className="flex gap-2">
-                  <Link href="/auth/login" className="flex-1">
-                    <Button className="w-full text-xs bg-blue-500 hover:bg-blue-600 text-white border-2 border-black">
-                      LOGIN
-                    </Button>
-                  </Link>
-                  <Link href="/auth/sign-up" className="flex-1">
-                    <Button className="w-full text-xs bg-green-500 hover:bg-green-600 text-white border-2 border-black">
-                      SIGN UP
-                    </Button>
-                  </Link>
-                </div>
+            {connected && (
+              <div className="mt-4">
+                <CreditsDisplay credits={userCredits} onTopUp={() => setTopupModalOpen(true)} />
               </div>
             )}
             {isAdmin && (
@@ -839,7 +823,7 @@ export default function SolanaEternalCanvas() {
                   <p className="text-base text-black">MINIMAL BLOCKCHAIN COST</p>
                 </div>
               )}
-              {user ? (
+              {connected ? (
                 <PurchaseButton
                   selectedArea={selectedArea}
                   isValidSelection={isValidSelection}
@@ -850,12 +834,7 @@ export default function SolanaEternalCanvas() {
                 />
               ) : (
                 <div className="p-3 bg-red-100 border-2 border-red-500 text-center">
-                  <p className="text-red-700 font-bold text-sm">LOGIN REQUIRED TO PURCHASE PIXELS</p>
-                  <Link href="/auth/login">
-                    <Button className="mt-2 bg-red-500 hover:bg-red-600 text-white border-2 border-black">
-                      LOGIN NOW
-                    </Button>
-                  </Link>
+                  <p className="text-red-700 font-bold text-sm">CONNECT WALLET TO PURCHASE PIXELS</p>
                 </div>
               )}
             </div>
@@ -958,6 +937,18 @@ export default function SolanaEternalCanvas() {
             setSelectedBlockForUpload(null)
           }}
           onImageUpload={handleImageUpload}
+        />
+      )}
+
+      {connected && publicKey && (
+        <TopupModal
+          isOpen={topupModalOpen}
+          onClose={() => setTopupModalOpen(false)}
+          walletAddress={publicKey.toString()}
+          onTopupSuccess={(newCredits) => {
+            setUserCredits(newCredits)
+            setTopupModalOpen(false)
+          }}
         />
       )}
     </div>

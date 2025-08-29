@@ -11,8 +11,10 @@ import { WalletButton } from "@/components/wallet-button"
 import { PurchaseButton } from "@/components/purchase-button"
 import { ImageUploadModal } from "@/components/image-upload-modal"
 import { VisitorCounter, ScrollingMarquee, BlinkingText, RainbowText, RetroStats } from "@/components/retro-elements"
+import { createClient } from "@/lib/supabase/client"
 
 interface PixelBlock {
+  id?: string
   x: number
   y: number
   width: number
@@ -24,8 +26,6 @@ interface PixelBlock {
 }
 
 const ADMIN_WALLET = "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS"
-const STORAGE_API_URL = "https://api.jsonbin.io/v3/b/679f1234567890abcdef1234" // Real JSONBin.io endpoint
-const STORAGE_API_KEY = "$2a$10$abcdef1234567890abcdef1234567890abcdef1234567890abcdef12" // Real API key
 
 export default function SolanaEternalCanvas() {
   const { connected, publicKey } = useWallet()
@@ -49,146 +49,98 @@ export default function SolanaEternalCanvas() {
 
   const isAdmin = connected && publicKey && publicKey.toString() === ADMIN_WALLET
 
-  const savePixelBlocksToGlobalStorage = async (blocks: PixelBlock[]) => {
+  const savePixelBlocksToDatabase = async (blocks: PixelBlock[]) => {
     try {
-      const updateData = {
-        blocks,
-        timestamp: Date.now(),
-        lastUpdater: publicKey?.toString() || "anonymous",
-        version: Date.now(),
+      const supabase = createClient()
+
+      const { error: deleteError } = await supabase
+        .from("pixel_blocks")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000")
+
+      if (deleteError) {
+        console.error("[v0] Failed to clear existing blocks:", deleteError)
       }
 
-      // Try to save to real external storage first
-      try {
-        const response = await fetch(STORAGE_API_URL, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Master-Key": STORAGE_API_KEY,
-            "X-Bin-Versioning": "false",
-          },
-          body: JSON.stringify(updateData),
-        })
+      const blocksToInsert = blocks.map((block) => ({
+        start_x: block.x,
+        start_y: block.y,
+        width: block.width,
+        height: block.height,
+        owner_id: block.owner || "anonymous",
+        image_url: block.imageUrl || null,
+        link_url: block.url || null,
+        total_price: block.width * block.height * 0.005,
+        alt_text: `Pixel block at ${block.x},${block.y}`,
+      }))
 
-        if (response.ok) {
-          console.log("[v0] Successfully saved to real global storage")
+      if (blocksToInsert.length > 0) {
+        const { error: insertError } = await supabase.from("pixel_blocks").insert(blocksToInsert)
 
-          // Also save locally as backup
-          localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
-          localStorage.setItem("sol-pixel-last-update", Date.now().toString())
-
-          // Broadcast to local tabs
-          const channel = new BroadcastChannel("sol-pixel-sync")
-          channel.postMessage(updateData)
-
-          return
+        if (insertError) {
+          console.error("[v0] Failed to save blocks to database:", insertError)
+          return false
         }
-      } catch (apiError) {
-        console.error("[v0] External API failed:", apiError)
       }
 
-      // Fallback: Use a simple HTTP storage service
-      try {
-        const fallbackResponse = await fetch("https://httpbin.org/post", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            action: "store_pixels",
-            data: updateData,
-          }),
-        })
-
-        if (fallbackResponse.ok) {
-          console.log("[v0] Saved to fallback global storage")
-          localStorage.setItem("sol-pixel-global-backup", JSON.stringify(updateData))
-        }
-      } catch (fallbackError) {
-        console.error("[v0] Fallback storage failed:", fallbackError)
-      }
-
-      // Final fallback to localStorage
-      localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
-      localStorage.setItem("sol-pixel-last-update", Date.now().toString())
-      console.log("[v0] Saved to local storage as final fallback")
+      console.log("[v0] Successfully saved", blocks.length, "blocks to database")
+      return true
     } catch (error) {
-      console.error("[v0] All storage methods failed:", error)
-      // Emergency fallback
-      localStorage.setItem("sol-pixel-blocks", JSON.stringify(blocks))
+      console.error("[v0] Database save error:", error)
+      return false
     }
   }
 
-  const loadPixelBlocksFromGlobalStorage = async (): Promise<PixelBlock[]> => {
+  const loadPixelBlocksFromDatabase = async (): Promise<PixelBlock[]> => {
     try {
-      // Try to load from real external storage first
-      try {
-        const response = await fetch(STORAGE_API_URL, {
-          method: "GET",
-          headers: {
-            "X-Master-Key": STORAGE_API_KEY,
-          },
-        })
+      const supabase = createClient()
 
-        if (response.ok) {
-          const data = await response.json()
-          if (data.record && data.record.blocks) {
-            console.log("[v0] Successfully loaded from real global storage:", data.record.blocks.length, "blocks")
-            return data.record.blocks
-          }
-        }
-      } catch (apiError) {
-        console.error("[v0] Failed to load from external API:", apiError)
+      const { data, error } = await supabase.from("pixel_blocks").select("*").order("created_at", { ascending: true })
+
+      if (error) {
+        console.error("[v0] Failed to load blocks from database:", error)
+        return []
       }
 
-      // Try fallback storage
-      const backupData = localStorage.getItem("sol-pixel-global-backup")
-      if (backupData) {
-        const parsed = JSON.parse(backupData)
-        if (parsed.blocks) {
-          console.log("[v0] Loaded from backup storage:", parsed.blocks.length, "blocks")
-          return parsed.blocks
-        }
-      }
+      const blocks: PixelBlock[] = (data || []).map((block) => ({
+        id: block.id,
+        x: block.start_x,
+        y: block.start_y,
+        width: block.width,
+        height: block.height,
+        owner: block.owner_id,
+        imageUrl: block.image_url || undefined,
+        url: block.link_url || undefined,
+        color: block.image_url ? undefined : "#" + Math.floor(Math.random() * 16777215).toString(16),
+      }))
 
-      // Final fallback to local storage
-      const localData = localStorage.getItem("sol-pixel-blocks")
-      if (localData) {
-        const blocks = JSON.parse(localData)
-        console.log("[v0] Loaded from local storage:", blocks.length, "blocks")
-        return blocks
-      }
-
-      console.log("[v0] No storage data found anywhere, starting with empty canvas")
-      return []
+      console.log("[v0] Successfully loaded", blocks.length, "blocks from database")
+      return blocks
     } catch (error) {
-      console.error("[v0] Failed to load from any storage:", error)
+      console.error("[v0] Database load error:", error)
       return []
     }
   }
 
   const syncPixelBlocks = useCallback(async () => {
     try {
-      const globalBlocks = await loadPixelBlocksFromGlobalStorage()
+      const databaseBlocks = await loadPixelBlocksFromDatabase()
 
-      if (globalBlocks.length !== pixelBlocks.length) {
-        console.log("[v0] Syncing pixel blocks from global storage:", globalBlocks.length, "blocks")
-        setPixelBlocks(globalBlocks)
+      if (databaseBlocks.length !== pixelBlocks.length) {
+        console.log("[v0] Syncing pixel blocks from database:", databaseBlocks.length, "blocks")
+        setPixelBlocks(databaseBlocks)
 
-        // Update total pixels sold
-        const totalPixels = globalBlocks.reduce((total, block) => total + block.width * block.height, 0)
+        const totalPixels = databaseBlocks.reduce((total, block) => total + block.width * block.height, 0)
         setTotalPixelsSold(totalPixels)
 
-        // Show notification for new blocks
-        if (globalBlocks.length > pixelBlocks.length) {
-          const newBlocks = globalBlocks.length - pixelBlocks.length
+        if (databaseBlocks.length > pixelBlocks.length) {
+          const newBlocks = databaseBlocks.length - pixelBlocks.length
           setNewBlockNotification(`${newBlocks} new pixel block${newBlocks > 1 ? "s" : ""} purchased!`)
           setTimeout(() => setNewBlockNotification(null), 3000)
         }
 
-        // Update recent updates with real global activity
-        if (globalBlocks.length > 0) {
-          const latestBlock = globalBlocks[globalBlocks.length - 1]
+        if (databaseBlocks.length > 0) {
+          const latestBlock = databaseBlocks[databaseBlocks.length - 1]
           const shortAddress = latestBlock.owner?.slice(0, 8) + "..." || "Unknown"
           setRecentUpdates((prev) => {
             const newUpdate = {
@@ -196,7 +148,6 @@ export default function SolanaEternalCanvas() {
               block: `${latestBlock.x},${latestBlock.y}`,
               time: "Just now",
             }
-            // Only add if it's not already the latest update
             if (prev.length === 0 || prev[0].block !== newUpdate.block) {
               return [newUpdate, ...prev.slice(0, 4)]
             }
@@ -205,65 +156,25 @@ export default function SolanaEternalCanvas() {
         }
       }
     } catch (error) {
-      console.error("[v0] Failed to sync from global storage:", error)
+      console.error("[v0] Failed to sync from database:", error)
     }
   }, [pixelBlocks.length])
 
   useEffect(() => {
-    const hasInitialized = sessionStorage.getItem("sol-pixel-initialized")
-
     const initializeCanvas = async () => {
-      if (!hasInitialized) {
-        sessionStorage.setItem("sol-pixel-initialized", "true")
-      }
-
-      // Always load from global storage to get latest data
-      const initialBlocks = await loadPixelBlocksFromGlobalStorage()
-      if (initialBlocks.length > 0) {
-        setPixelBlocks(initialBlocks)
-        const totalPixels = initialBlocks.reduce((total, block) => total + block.width * block.height, 0)
-        setTotalPixelsSold(totalPixels)
-        console.log("[v0] Initialized with", initialBlocks.length, "blocks from global storage")
-      } else {
-        console.log("[v0] Initialized with empty canvas")
-        setPixelBlocks([])
-        setTotalPixelsSold(0)
-      }
+      const initialBlocks = await loadPixelBlocksFromDatabase()
+      setPixelBlocks(initialBlocks)
+      const totalPixels = initialBlocks.reduce((total, block) => total + block.width * block.height, 0)
+      setTotalPixelsSold(totalPixels)
+      console.log("[v0] Initialized with", initialBlocks.length, "blocks from database")
     }
 
     initializeCanvas()
 
-    const syncInterval = setInterval(syncPixelBlocks, 2000)
-
-    // Listen for updates from other tabs/windows
-    const handleStorageUpdate = (e: CustomEvent) => {
-      console.log("[v0] Received cross-tab update")
-      syncPixelBlocks()
-    }
-
-    const channel = new BroadcastChannel("sol-pixel-sync")
-    const handleBroadcastMessage = (event: MessageEvent) => {
-      console.log("[v0] Received broadcast update")
-      if (event.data && event.data.blocks) {
-        setPixelBlocks(event.data.blocks)
-        const totalPixels = event.data.blocks.reduce(
-          (total: number, block: PixelBlock) => total + block.width * block.height,
-          0,
-        )
-        setTotalPixelsSold(totalPixels)
-      }
-    }
-
-    window.addEventListener("sol-pixel-update", handleStorageUpdate as EventListener)
-    window.addEventListener("sol-pixel-global-update", handleStorageUpdate as EventListener)
-    channel.addEventListener("message", handleBroadcastMessage)
+    const syncInterval = setInterval(syncPixelBlocks, 3000)
 
     return () => {
       clearInterval(syncInterval)
-      window.removeEventListener("sol-pixel-update", handleStorageUpdate as EventListener)
-      window.removeEventListener("sol-pixel-global-update", handleStorageUpdate as EventListener)
-      channel.removeEventListener("message", handleBroadcastMessage)
-      channel.close()
     }
   }, [])
 
@@ -271,7 +182,7 @@ export default function SolanaEternalCanvas() {
     const updatedBlocks = [...pixelBlocks, newBlock]
     setPixelBlocks(updatedBlocks)
 
-    await savePixelBlocksToGlobalStorage(updatedBlocks)
+    await savePixelBlocksToDatabase(updatedBlocks)
 
     setTotalPixelsSold((prev) => prev + newBlock.width * newBlock.height)
     setSelectedArea(null)
@@ -286,7 +197,7 @@ export default function SolanaEternalCanvas() {
       ...prev.slice(0, 4),
     ])
 
-    console.log("[v0] Real purchase completed and saved to global storage for worldwide sync")
+    console.log("[v0] Real purchase completed and saved to database for worldwide sync")
   }
 
   const handleImageUpload = async (blockIndex: number, imageUrl: string, url?: string) => {
@@ -306,7 +217,7 @@ export default function SolanaEternalCanvas() {
           imageUrl,
           ...(url !== undefined && { url }),
         }
-        savePixelBlocksToGlobalStorage(updated)
+        savePixelBlocksToDatabase(updated)
       }
       return updated
     })
@@ -325,7 +236,6 @@ export default function SolanaEternalCanvas() {
   const handleRetractPixels = async (area: { x: number; y: number; width: number; height: number }) => {
     setPixelBlocks((prev) => {
       const filtered = prev.filter((block) => {
-        // Remove blocks that overlap with the retract area
         return !(
           block.x < area.x + area.width &&
           block.x + block.width > area.x &&
@@ -333,11 +243,10 @@ export default function SolanaEternalCanvas() {
           block.y + block.height > area.y
         )
       })
-      savePixelBlocksToGlobalStorage(filtered)
+      savePixelBlocksToDatabase(filtered)
       return filtered
     })
 
-    // Update total pixels sold count
     const removedPixels = pixelBlocks
       .filter((block) => {
         return (
@@ -352,7 +261,6 @@ export default function SolanaEternalCanvas() {
     setTotalPixelsSold((prev) => Math.max(0, prev - removedPixels))
     setSelectedArea(null)
 
-    // Add to recent updates
     const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
     setRecentUpdates((prev) => [
       {
@@ -376,14 +284,12 @@ export default function SolanaEternalCanvas() {
             block.owner === blockToRemove.owner
           ),
       )
-      savePixelBlocksToGlobalStorage(filtered)
+      savePixelBlocksToDatabase(filtered)
       return filtered
     })
 
-    // Update total pixels sold count
     setTotalPixelsSold((prev) => Math.max(0, prev - blockToRemove.width * blockToRemove.height))
 
-    // Add to recent updates
     const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
     setRecentUpdates((prev) => [
       {
@@ -416,14 +322,11 @@ export default function SolanaEternalCanvas() {
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // Draw white background
     ctx.fillStyle = "#ffffff"
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    // Draw grid lines
     ctx.strokeStyle = "#e0e0e0"
     ctx.lineWidth = 1
     const gridSize = 10
@@ -442,19 +345,16 @@ export default function SolanaEternalCanvas() {
       ctx.stroke()
     }
 
-    // Draw pixel blocks
     pixelBlocks.forEach((block) => {
       if (block.imageUrl) {
         const img = new Image()
         img.onload = () => {
           ctx.drawImage(img, block.x, block.y, block.width, block.height)
 
-          // Draw border
           ctx.strokeStyle = "#000000"
           ctx.lineWidth = 2
           ctx.strokeRect(block.x, block.y, block.width, block.height)
 
-          // Highlight user's blocks
           if (connected && publicKey && block.owner === publicKey.toString()) {
             ctx.strokeStyle = "#ffff00"
             ctx.lineWidth = 3
@@ -463,16 +363,13 @@ export default function SolanaEternalCanvas() {
         }
         img.src = block.imageUrl
       } else {
-        // Draw colored block
         ctx.fillStyle = block.color || "#cccccc"
         ctx.fillRect(block.x, block.y, block.width, block.height)
 
-        // Draw border
         ctx.strokeStyle = "#000000"
         ctx.lineWidth = 2
         ctx.strokeRect(block.x, block.y, block.width, block.height)
 
-        // Highlight user's blocks
         if (connected && publicKey && block.owner === publicKey.toString()) {
           ctx.strokeStyle = "#ffff00"
           ctx.lineWidth = 3
@@ -481,7 +378,6 @@ export default function SolanaEternalCanvas() {
       }
     })
 
-    // Draw selection area
     if (selectedArea) {
       ctx.strokeStyle = "#ff0000"
       ctx.lineWidth = 2
@@ -523,7 +419,6 @@ export default function SolanaEternalCanvas() {
       const width = Math.abs(coords.x - selectionStart.x)
       const height = Math.abs(coords.y - selectionStart.y)
 
-      // Snap to 10px grid
       const snappedWidth = Math.max(10, Math.round(width / 10) * 10)
       const snappedHeight = Math.max(10, Math.round(height / 10) * 10)
       const snappedX = Math.round(x / 10) * 10
@@ -543,11 +438,10 @@ export default function SolanaEternalCanvas() {
   }
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isSelecting) return // Don't handle clicks during selection
+    if (isSelecting) return
 
     const coords = getCanvasCoordinates(e)
 
-    // Find clicked pixel block
     const clickedBlock = pixelBlocks.find(
       (block) =>
         coords.x >= block.x &&
@@ -557,7 +451,6 @@ export default function SolanaEternalCanvas() {
     )
 
     if (clickedBlock && clickedBlock.url) {
-      // Open URL in new tab
       window.open(clickedBlock.url, "_blank", "noopener,noreferrer")
     }
   }
@@ -566,7 +459,6 @@ export default function SolanaEternalCanvas() {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    // Set canvas to show 1000x1000 pixels at 0.8 scale for readability
     canvas.width = 800
     canvas.height = 800
 

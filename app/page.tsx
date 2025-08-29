@@ -54,6 +54,8 @@ export default function PixelCanvas() {
 
   const [newBlockNotification, setNewBlockNotification] = useState<string | null>(null)
   const [lastNotifiedBlockCount, setLastNotifiedBlockCount] = useState(0)
+  const [shownNotifications, setShownNotifications] = useState<Set<string>>(new Set())
+  const [lastPurchaseByUser, setLastPurchaseByUser] = useState<string | null>(null)
 
   const [user, setUser] = useState<any>(null)
   const [isAuthLoading, setIsAuthLoading] = useState(true)
@@ -230,6 +232,14 @@ export default function PixelCanvas() {
 
   const loadPixelBlocksFromDatabase = async (): Promise<PixelBlock[]> => {
     try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      if (!supabaseUrl || !supabaseKey) {
+        console.log("[v0] Supabase environment variables not configured, using empty blocks array")
+        return []
+      }
+
       const supabase = createClient()
 
       const { data, error } = await supabase
@@ -287,11 +297,42 @@ export default function PixelCanvas() {
         setTotalPixelsSold(totalPixels)
 
         if (databaseBlocks.length > lastNotifiedBlockCount && databaseBlocks.length > 0) {
-          const newBlocks = databaseBlocks.length - lastNotifiedBlockCount
-          setNewBlockNotification(`${newBlocks} new pixel block${newBlocks > 1 ? "s" : ""} purchased!`)
-          setLastNotifiedBlockCount(databaseBlocks.length)
-          setTimeout(() => setNewBlockNotification(null), 3000)
+          const newBlocks = databaseBlocks.slice(lastNotifiedBlockCount)
+          const otherUserBlocks = newBlocks.filter(
+            (block) =>
+              block.owner !== publicKey?.toString() && !shownNotifications.has(`${block.x}-${block.y}-${block.owner}`),
+          )
+
+          if (otherUserBlocks.length > 0) {
+            const notificationKey = `${Date.now()}-${otherUserBlocks.length}`
+            if (!shownNotifications.has(notificationKey)) {
+              setNewBlockNotification(
+                `${otherUserBlocks.length} new pixel block${otherUserBlocks.length > 1 ? "s" : ""} purchased!`,
+              )
+              setShownNotifications(
+                (prev) =>
+                  new Set([
+                    ...prev,
+                    notificationKey,
+                    ...otherUserBlocks.map((block) => `${block.x}-${block.y}-${block.owner}`),
+                  ]),
+              )
+              setTimeout(() => {
+                setNewBlockNotification(null)
+                // Clean up old notifications after 10 seconds
+                setTimeout(() => {
+                  setShownNotifications((prev) => {
+                    const newSet = new Set(prev)
+                    newSet.delete(notificationKey)
+                    return newSet
+                  })
+                }, 10000)
+              }, 3000)
+            }
+          }
         }
+
+        setLastNotifiedBlockCount(databaseBlocks.length)
 
         if (databaseBlocks.length > 0) {
           const latestBlock = databaseBlocks[databaseBlocks.length - 1]
@@ -344,6 +385,8 @@ export default function PixelCanvas() {
       return
     }
 
+    setLastPurchaseByUser(`${newBlock.x}-${newBlock.y}-${newBlock.owner}`)
+
     const saveSuccess = await savePixelBlockToDatabase(newBlock)
 
     if (saveSuccess) {
@@ -352,9 +395,12 @@ export default function PixelCanvas() {
       setPixelBlocks(updatedBlocks)
       setTotalPixelsSold((prev) => prev + newBlock.width * newBlock.height)
 
+      setLastNotifiedBlockCount(updatedBlocks.length)
+      setShownNotifications((prev) => new Set([...prev, `${newBlock.x}-${newBlock.y}-${newBlock.owner}`]))
+
       setTimeout(() => {
         syncPixelBlocks()
-      }, 1000)
+      }, 500)
     } else {
       console.error("[v0] Failed to save purchase to database - not updating local state")
       return

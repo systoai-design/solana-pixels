@@ -96,7 +96,7 @@ export function PurchaseButton({
 
     try {
       const pixelCount = selectedArea.width * selectedArea.height
-      const creditsNeeded = isAdmin ? Math.ceil(pixelCount * 0.1) : pixelCount * 50
+      const creditsNeeded = isAdmin ? Math.ceil(pixelCount * 0.1) : pixelCount * 100
       const isWar = isPurchaseWar()
 
       console.log(
@@ -169,7 +169,7 @@ export function PurchaseButton({
   }
 
   const pixelCount = selectedArea ? selectedArea.width * selectedArea.height : 0
-  const creditsNeeded = isAdmin ? Math.ceil(pixelCount * 0.1) : pixelCount * 50
+  const creditsNeeded = isAdmin ? Math.ceil(pixelCount * 0.1) : pixelCount * 100
   const hasEnoughCredits = userCredits >= creditsNeeded
   const isWar = isPurchaseWar()
   const existingOwners = getExistingOwners()

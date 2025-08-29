@@ -62,6 +62,10 @@ export default function SolanaEternalCanvas() {
   const [usernameModalOpen, setUsernameModalOpen] = useState(false)
   const [currentUsername, setCurrentUsername] = useState("")
 
+  const [isPurchasing, setIsPurchasing] = useState(false)
+  const [purchaseError, setPurchaseError] = useState<string | null>(null)
+  const [isRetracting, setIsRetracting] = useState(false)
+
   const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
 
   useEffect(() => {
@@ -132,7 +136,7 @@ export default function SolanaEternalCanvas() {
         return false
       }
 
-      const pricePerPixel = isAdmin ? 0.1 : 50
+      const pricePerPixel = isAdmin ? 0.1 : 100
       const transactionSignature =
         block.transaction_signature || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
 
@@ -389,131 +393,148 @@ export default function SolanaEternalCanvas() {
   }
 
   const handleRetractPixels = async (area: { x: number; y: number; width: number; height: number }) => {
-    const blocksToRemove = pixelBlocks.filter((block) => {
-      return (
-        block.x < area.x + area.width &&
-        block.x + block.width > area.x &&
-        block.y < area.y + area.height &&
-        block.y + block.height > area.y
-      )
-    })
+    if (!isAdmin) return
 
-    const totalPixelsToRefund = blocksToRemove.reduce((total, block) => total + block.width * block.height, 0)
-    const refundAmount = isAdmin ? Math.ceil(totalPixelsToRefund * 0.1) : totalPixelsToRefund * 50
+    setIsRetracting(true)
+    try {
+      console.log(`[v0] Admin retracting pixels in area:`, area)
 
-    let allDeleted = true
-    for (const block of blocksToRemove) {
-      const deleteSuccess = await deletePixelBlockFromDatabase(block)
-      if (!deleteSuccess) {
-        allDeleted = false
-      }
-    }
-
-    if (allDeleted && totalPixelsToRefund > 0) {
-      try {
-        const supabase = createClient()
-        const newCreditsBalance = userCredits + refundAmount
-
-        const { error: updateError } = await supabase
-          .from("users")
-          .update({ credits: newCreditsBalance })
-          .eq("wallet_address", publicKey?.toString())
-
-        if (!updateError) {
-          console.log(
-            `[v0] Refunded ${refundAmount} credits for ${totalPixelsToRefund} pixels. New balance: ${newCreditsBalance}`,
-          )
-          setUserCredits(newCreditsBalance)
-        } else {
-          console.error("[v0] Failed to refund credits:", updateError)
-        }
-      } catch (error) {
-        console.error("[v0] Error processing credit refund:", error)
-      }
-
-      setPixelBlocks((prev) => {
-        return prev.filter((block) => {
-          return !(
-            block.x < area.x + area.width &&
-            block.x + block.width > area.x &&
-            block.y < area.y + area.height &&
-            block.y + block.height > area.y
-          )
-        })
-      })
-
-      const removedPixels = blocksToRemove.reduce((total, block) => total + block.width * block.height, 0)
-      setTotalPixelsSold((prev) => Math.max(0, prev - removedPixels))
-    } else {
-      console.error("[v0] Failed to delete some blocks from database")
-    }
-
-    setSelectedArea(null)
-
-    const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
-    setRecentUpdates((prev) => [
-      {
-        user: shortAddress,
-        block: `${area.x},${area.y}`,
-        time: "Just now (RETRACTED)",
-      },
-      ...prev.slice(0, 4),
-    ])
-  }
-
-  const handleRetractIndividualBlock = async (blockToRemove: PixelBlock) => {
-    const pixelsToRefund = blockToRemove.width * blockToRemove.height
-    const refundAmount = isAdmin ? Math.ceil(pixelsToRefund * 0.1) : pixelsToRefund * 50
-
-    const deleteSuccess = await deletePixelBlockFromDatabase(blockToRemove)
-
-    if (deleteSuccess) {
-      try {
-        const supabase = createClient()
-        const newCreditsBalance = userCredits + refundAmount
-
-        const { error: updateError } = await supabase
-          .from("users")
-          .update({ credits: newCreditsBalance })
-          .eq("wallet_address", publicKey?.toString())
-
-        if (!updateError) {
-          console.log(`[v0] Refunded ${refundAmount} credits for individual block. New balance: ${newCreditsBalance}`)
-          setUserCredits(newCreditsBalance)
-        } else {
-          console.error("[v0] Failed to refund credits:", updateError)
-        }
-      } catch (error) {
-        console.error("[v0] Error processing credit refund:", error)
-      }
-
-      setPixelBlocks((prev) => {
-        return prev.filter(
-          (block) =>
-            !(
-              block.x === blockToRemove.x &&
-              block.y === blockToRemove.y &&
-              block.width === blockToRemove.width &&
-              block.height === blockToRemove.height &&
-              block.owner === blockToRemove.owner
-            ),
+      const blocksToRemove = pixelBlocks.filter((block) => {
+        return (
+          block.x < area.x + area.width &&
+          block.x + block.width > area.x &&
+          block.y < area.y + area.height &&
+          block.y + block.height > area.y
         )
       })
 
-      setTotalPixelsSold((prev) => Math.max(0, prev - blockToRemove.width * blockToRemove.height))
-    } else {
-      console.error("[v0] Failed to delete block from database")
-    }
+      const totalPixelsToRefund = blocksToRemove.reduce((total, block) => total + block.width * block.height, 0)
+      const refundAmount = isAdmin ? Math.ceil(totalPixelsToRefund * 0.1) : totalPixelsToRefund * 100
 
-    const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
-    setRecentUpdates((prev) => [
-      {
-        user: shortAddress,
-        block: `${blockToRemove.x},${blockToRemove.y}`,
-        time: "Just now (RETRACTED)",
-      },
-      ...prev.slice(0, 4),
-    ])
+      let allDeleted = true
+      for (const block of blocksToRemove) {
+        const deleteSuccess = await deletePixelBlockFromDatabase(block)
+        if (!deleteSuccess) {
+          allDeleted = false
+        }
+      }
+
+      if (allDeleted && totalPixelsToRefund > 0) {
+        try {
+          const supabase = createClient()
+          const newCreditsBalance = userCredits + refundAmount
+
+          const { error: updateError } = await supabase
+            .from("users")
+            .update({ credits: newCreditsBalance })
+            .eq("wallet_address", publicKey?.toString())
+
+          if (!updateError) {
+            console.log(
+              `[v0] Refunded ${refundAmount} credits for ${totalPixelsToRefund} pixels. New balance: ${newCreditsBalance}`,
+            )
+            setUserCredits(newCreditsBalance)
+          } else {
+            console.error("[v0] Failed to refund credits:", updateError)
+          }
+        } catch (error) {
+          console.error("[v0] Error processing credit refund:", error)
+        }
+
+        setPixelBlocks((prev) => {
+          return prev.filter((block) => {
+            return !(
+              block.x < area.x + area.width &&
+              block.x + block.width > area.x &&
+              block.y < area.y + area.height &&
+              block.y + block.height > area.y
+            )
+          })
+        })
+
+        const removedPixels = blocksToRemove.reduce((total, block) => total + block.width * block.height, 0)
+        setTotalPixelsSold((prev) => Math.max(0, prev - removedPixels))
+      } else {
+        console.error("[v0] Failed to delete some blocks from database")
+      }
+
+      setSelectedArea(null)
+
+      const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
+      setRecentUpdates((prev) => [
+        {
+          user: shortAddress,
+          block: `${area.x},${area.y}`,
+          time: "Just now (RETRACTED)",
+        },
+        ...prev.slice(0, 4),
+      ])
+    } finally {
+      setIsRetracting(false)
+    }
+  }
+
+  const handleRetractIndividualBlock = async (blockToRemove: any) => {
+    if (!isAdmin) return
+
+    try {
+      console.log(`[v0] Admin retracting individual block:`, blockToRemove)
+
+      const pixelsToRefund = blockToRemove.width * blockToRemove.height
+      const refundAmount = isAdmin ? Math.ceil(pixelsToRefund * 0.1) : pixelsToRefund * 100
+
+      const deleteSuccess = await deletePixelBlockFromDatabase(blockToRemove)
+
+      if (deleteSuccess) {
+        try {
+          const supabase = createClient()
+          const newCreditsBalance = userCredits + refundAmount
+
+          const { error: updateError } = await supabase
+            .from("users")
+            .update({ credits: newCreditsBalance })
+            .eq("wallet_address", publicKey?.toString())
+
+          if (!updateError) {
+            console.log(`[v0] Refunded ${refundAmount} credits for individual block. New balance: ${newCreditsBalance}`)
+            setUserCredits(newCreditsBalance)
+          } else {
+            console.error("[v0] Failed to refund credits:", updateError)
+          }
+        } catch (error) {
+          console.error("[v0] Error processing credit refund:", error)
+        }
+
+        setPixelBlocks((prev) => {
+          return prev.filter(
+            (block) =>
+              !(
+                block.x === blockToRemove.x &&
+                block.y === blockToRemove.y &&
+                block.width === blockToRemove.width &&
+                block.height === blockToRemove.height &&
+                block.owner === blockToRemove.owner
+              ),
+          )
+        })
+
+        setTotalPixelsSold((prev) => Math.max(0, prev - blockToRemove.width * blockToRemove.height))
+      } else {
+        console.error("[v0] Failed to delete block from database")
+      }
+
+      const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
+      setRecentUpdates((prev) => [
+        {
+          user: shortAddress,
+          block: `${blockToRemove.x},${blockToRemove.y}`,
+          time: "Just now (RETRACTED)",
+        },
+        ...prev.slice(0, 4),
+      ])
+    } finally {
+      setIsRetracting(false)
+    }
   }
 
   const openUploadModal = (block: PixelBlock, index: number) => {
@@ -544,23 +565,7 @@ export default function SolanaEternalCanvas() {
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
     // Draw grid lines for available areas
-    ctx.strokeStyle = "#e0e0e0"
-    ctx.lineWidth = 1
-    const gridSize = 10
-
-    for (let i = 0; i <= canvas.width; i += gridSize) {
-      ctx.beginPath()
-      ctx.moveTo(i, 0)
-      ctx.lineTo(i, canvas.height)
-      ctx.stroke()
-    }
-
-    for (let i = 0; i <= canvas.height; i += gridSize) {
-      ctx.beginPath()
-      ctx.moveTo(0, i)
-      ctx.lineTo(canvas.width, i)
-      ctx.stroke()
-    }
+    drawGrid(ctx, canvas)
 
     // Draw owned blocks with enhanced visual states
     pixelBlocks.forEach((block) => {
@@ -647,6 +652,26 @@ export default function SolanaEternalCanvas() {
     }
   }, [pixelBlocks, selectedArea, connected, publicKey])
 
+  const drawGrid = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    ctx.strokeStyle = "#e0e0e0"
+    ctx.lineWidth = 0.5
+    const gridSize = 1
+
+    for (let i = 0; i <= canvas.width; i += 10) {
+      ctx.beginPath()
+      ctx.moveTo(i, 0)
+      ctx.lineTo(i, canvas.height)
+      ctx.stroke()
+    }
+
+    for (let i = 0; i <= canvas.height; i += 10) {
+      ctx.beginPath()
+      ctx.moveTo(0, i)
+      ctx.lineTo(canvas.width, i)
+      ctx.stroke()
+    }
+  }
+
   const getCanvasCoordinates = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return { x: 0, y: 0 }
@@ -708,7 +733,6 @@ export default function SolanaEternalCanvas() {
     )
 
     if (clickedBlock) {
-      // If block has a URL, open it (advertisement click)
       if (clickedBlock.url) {
         let finalUrl = clickedBlock.url.trim()
 
@@ -723,7 +747,6 @@ export default function SolanaEternalCanvas() {
           console.error("[v0] Failed to open advertisement URL:", error)
         }
       } else {
-        // If it's user's own block without URL, show upload modal
         const isOwnedByCurrentUser = connected && publicKey && clickedBlock.owner === publicKey.toString()
         if (isOwnedByCurrentUser) {
           const blockIndex = pixelBlocks.findIndex((b) => b.id === clickedBlock.id)
@@ -738,8 +761,8 @@ export default function SolanaEternalCanvas() {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    canvas.width = 800
-    canvas.height = 800
+    canvas.width = 1000
+    canvas.height = 1000
 
     drawCanvas()
   }, [drawCanvas])
@@ -763,7 +786,7 @@ export default function SolanaEternalCanvas() {
     { label: "PIXELS SOLD", value: totalPixelsSold.toLocaleString(), color: "text-red-600" },
     {
       label: "CREDITS PER PIXEL",
-      value: isAdmin ? "0.1" : "50",
+      value: isAdmin ? "0.1" : "100",
       color: isAdmin ? "text-blue-600" : "text-green-600",
     },
     { label: "PIXELS LEFT", value: (1000000 - totalPixelsSold).toLocaleString(), color: "text-blue-600" },
@@ -800,13 +823,11 @@ export default function SolanaEternalCanvas() {
         .single()
 
       if (error) {
-        console.error("[v0] Failed to load username:", error)
         return walletAddress.slice(0, 8) + "..."
       }
 
       return data?.username || walletAddress.slice(0, 8) + "..."
     } catch (error) {
-      console.error("[v0] Error loading username:", error)
       return walletAddress.slice(0, 8) + "..."
     }
   }
@@ -899,16 +920,15 @@ export default function SolanaEternalCanvas() {
             <div
               ref={containerRef}
               className="relative overflow-auto border-4 border-black bg-white"
-              style={{ height: "800px", maxHeight: "800px" }}
+              style={{ height: "1000px", maxHeight: "1000px" }}
             >
               <canvas
                 ref={canvasRef}
-                className="cursor-crosshair pixel-perfect"
+                className="border border-gray-300 cursor-crosshair bg-pink-50"
+                style={{ height: "1000px", maxHeight: "1000px" }}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                onClick={handleCanvasClick}
                 onContextMenu={(e) => e.preventDefault()}
               />
             </div>
@@ -923,11 +943,11 @@ export default function SolanaEternalCanvas() {
                     SELECTED: {selectedArea.width}x{selectedArea.height} PIXELS (COST:{" "}
                     {isAdmin
                       ? Math.ceil(selectedArea.width * selectedArea.height * 0.1) + " CREDITS"
-                      : selectedArea.width * selectedArea.height * 50 + " CREDITS"}
+                      : selectedArea.width * selectedArea.height * 100 + " CREDITS"}
                     {" ≈ "}
                     {isAdmin
                       ? creditsToSol(Math.ceil(selectedArea.width * selectedArea.height * 0.1)) + " SOL"
-                      : creditsToSol(selectedArea.width * selectedArea.height * 50) + " SOL"}
+                      : creditsToSol(selectedArea.width * selectedArea.height * 100) + " SOL"}
                     )
                   </Badge>
                   {!isValidSelection && hasOverlap(selectedArea) && (
@@ -987,8 +1007,8 @@ export default function SolanaEternalCanvas() {
               )}
               {!isAdmin && (
                 <div className="bg-blue-200 p-3 border-2 border-black">
-                  <p className="font-bold comic-font text-black text-lg">50 CREDITS/PIXEL</p>
-                  <p className="text-base text-black">≈ {creditsToSol(50)} SOL/PIXEL</p>
+                  <p className="font-bold comic-font text-black text-lg">100 CREDITS/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToSol(100)} SOL/PIXEL</p>
                 </div>
               )}
               {connected ? (

@@ -826,6 +826,10 @@ export default function SolanaEternalCanvas() {
     }
   }
 
+  const creditsToSol = (credits: number) => {
+    return (credits / 1000000).toFixed(6)
+  }
+
   return (
     <div className="min-h-screen bg-white p-4">
       {newBlockNotification && (
@@ -920,6 +924,10 @@ export default function SolanaEternalCanvas() {
                     {isAdmin
                       ? Math.ceil(selectedArea.width * selectedArea.height * 0.1) + " CREDITS"
                       : selectedArea.width * selectedArea.height * 50 + " CREDITS"}
+                    {" ≈ "}
+                    {isAdmin
+                      ? creditsToSol(Math.ceil(selectedArea.width * selectedArea.height * 0.1)) + " SOL"
+                      : creditsToSol(selectedArea.width * selectedArea.height * 50) + " SOL"}
                     )
                   </Badge>
                   {!isValidSelection && hasOverlap(selectedArea) && (
@@ -934,19 +942,25 @@ export default function SolanaEternalCanvas() {
         <div className="space-y-6">
           <Card className="p-4 bg-white border-4 border-black">
             <h3 className="font-bold text-xl mb-4 text-center comic-font text-black">🔗 CONNECT WALLET</h3>
-            <div className="flex gap-2">
+            <div className="space-y-3">
               <WalletButton />
               {connected && (
-                <Button onClick={() => setUsernameModalOpen(true)} variant="outline" size="sm">
-                  👤 {currentUsername}
-                </Button>
+                <div className="space-y-2">
+                  <div className="bg-gray-50 p-2 border-2 border-gray-300 rounded">
+                    <p className="text-xs font-bold text-gray-600 mb-1">USERNAME:</p>
+                    <Button
+                      onClick={() => setUsernameModalOpen(true)}
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start bg-purple-100 hover:bg-purple-200 border-purple-300"
+                    >
+                      👤 {currentUsername || "Set Username"}
+                    </Button>
+                  </div>
+                  <CreditsDisplay credits={userCredits} onTopUp={() => setPaymentModalOpen(true)} />
+                </div>
               )}
             </div>
-            {connected && (
-              <div className="mt-4">
-                <CreditsDisplay credits={userCredits} onTopUp={() => setPaymentModalOpen(true)} />
-              </div>
-            )}
             {isAdmin && (
               <div className="mt-2 p-2 bg-yellow-200 border-2 border-black text-center">
                 <p className="text-black font-bold text-sm">👑 ADMIN ACCESS 👑</p>
@@ -968,7 +982,13 @@ export default function SolanaEternalCanvas() {
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">ADMIN: 0.1 CREDITS/PIXEL!</p>
-                  <p className="text-base text-black">MINIMAL COST</p>
+                  <p className="text-base text-black">≈ {creditsToSol(0.1)} SOL/PIXEL</p>
+                </div>
+              )}
+              {!isAdmin && (
+                <div className="bg-blue-200 p-3 border-2 border-black">
+                  <p className="font-bold comic-font text-black text-lg">50 CREDITS/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToSol(50)} SOL/PIXEL</p>
                 </div>
               )}
               {connected ? (

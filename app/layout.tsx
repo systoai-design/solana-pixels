@@ -30,7 +30,7 @@ const jersey10 = Jersey_10({
 export const metadata: Metadata = {
   title: "Sol Pixel - Own 1M Pixels Forever on Solana",
   description:
-    "Buy and own pixels forever on the Solana blockchain. 1,000,000 pixels available for 0.005 SOL each. Upload your art anytime!",
+    "Buy and own pixels forever on the Solana blockchain. 1,000,000 pixels available for 1 credit each. Upload your art anytime!",
   generator: "v0.app",
 }
 

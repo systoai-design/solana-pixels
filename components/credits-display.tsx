@@ -14,7 +14,7 @@ export function CreditsDisplay({ credits, onTopUp }: CreditsDisplayProps) {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-bold text-lg">💰 CREDITS</h3>
-          <p className="text-2xl font-mono font-bold">{credits.toFixed(8)} SOL</p>
+          <p className="text-2xl font-mono font-bold">{credits.toLocaleString()} CREDITS</p>
         </div>
         <Button onClick={onTopUp} className="bg-green-500 hover:bg-green-600 text-white font-bold">
           TOP UP

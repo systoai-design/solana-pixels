@@ -22,20 +22,34 @@ export function WalletButton() {
 
   useEffect(() => {
     if (connected && publicKey) {
-      const connection = new Connection("https://api.devnet.solana.com")
+      const connection = new Connection("https://solana-rpc.publicnode.com", "confirmed")
 
       const getBalance = async () => {
         try {
           console.log("[v0] Fetching balance for:", publicKey.toString())
           const balance = await connection.getBalance(publicKey)
-          setBalance(balance / LAMPORTS_PER_SOL)
-          console.log("[v0] Balance fetched:", balance / LAMPORTS_PER_SOL, "SOL")
+          const solBalance = balance / LAMPORTS_PER_SOL
+          setBalance(solBalance)
+          console.log("[v0] Balance fetched:", solBalance, "SOL")
         } catch (error) {
           console.error("[v0] Error fetching balance:", error)
+          try {
+            const fallbackConnection = new Connection("https://solana.drpc.org", "confirmed")
+            const fallbackBalance = await fallbackConnection.getBalance(publicKey)
+            const fallbackSolBalance = fallbackBalance / LAMPORTS_PER_SOL
+            setBalance(fallbackSolBalance)
+            console.log("[v0] Fallback balance fetched:", fallbackSolBalance, "SOL")
+          } catch (fallbackError) {
+            console.error("[v0] Fallback balance fetch failed:", fallbackError)
+            setBalance(0)
+          }
         }
       }
 
       getBalance()
+
+      const interval = setInterval(getBalance, 60000)
+      return () => clearInterval(interval)
     } else {
       setBalance(null)
     }

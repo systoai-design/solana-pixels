@@ -127,7 +127,7 @@ export default function SolanaEternalCanvas() {
         return false
       }
 
-      const pricePerPixel = isAdmin ? 0.00000001 : 0.005
+      const pricePerPixel = isAdmin ? 0.1 : 50
       const transactionSignature =
         block.transaction_signature || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
 
@@ -392,6 +392,9 @@ export default function SolanaEternalCanvas() {
       )
     })
 
+    const totalPixelsToRefund = blocksToRemove.reduce((total, block) => total + block.width * block.height, 0)
+    const refundAmount = isAdmin ? Math.ceil(totalPixelsToRefund * 0.1) : totalPixelsToRefund * 50
+
     let allDeleted = true
     for (const block of blocksToRemove) {
       const deleteSuccess = await deletePixelBlockFromDatabase(block)
@@ -400,7 +403,28 @@ export default function SolanaEternalCanvas() {
       }
     }
 
-    if (allDeleted) {
+    if (allDeleted && totalPixelsToRefund > 0) {
+      try {
+        const supabase = createClient()
+        const newCreditsBalance = userCredits + refundAmount
+
+        const { error: updateError } = await supabase
+          .from("users")
+          .update({ credits: newCreditsBalance })
+          .eq("wallet_address", publicKey?.toString())
+
+        if (!updateError) {
+          console.log(
+            `[v0] Refunded ${refundAmount} credits for ${totalPixelsToRefund} pixels. New balance: ${newCreditsBalance}`,
+          )
+          setUserCredits(newCreditsBalance)
+        } else {
+          console.error("[v0] Failed to refund credits:", updateError)
+        }
+      } catch (error) {
+        console.error("[v0] Error processing credit refund:", error)
+      }
+
       setPixelBlocks((prev) => {
         return prev.filter((block) => {
           return !(
@@ -432,9 +456,31 @@ export default function SolanaEternalCanvas() {
   }
 
   const handleRetractIndividualBlock = async (blockToRemove: PixelBlock) => {
+    const pixelsToRefund = blockToRemove.width * blockToRemove.height
+    const refundAmount = isAdmin ? Math.ceil(pixelsToRefund * 0.1) : pixelsToRefund * 50
+
     const deleteSuccess = await deletePixelBlockFromDatabase(blockToRemove)
 
     if (deleteSuccess) {
+      try {
+        const supabase = createClient()
+        const newCreditsBalance = userCredits + refundAmount
+
+        const { error: updateError } = await supabase
+          .from("users")
+          .update({ credits: newCreditsBalance })
+          .eq("wallet_address", publicKey?.toString())
+
+        if (!updateError) {
+          console.log(`[v0] Refunded ${refundAmount} credits for individual block. New balance: ${newCreditsBalance}`)
+          setUserCredits(newCreditsBalance)
+        } else {
+          console.error("[v0] Failed to refund credits:", updateError)
+        }
+      } catch (error) {
+        console.error("[v0] Error processing credit refund:", error)
+      }
+
       setPixelBlocks((prev) => {
         return prev.filter(
           (block) =>
@@ -657,8 +703,8 @@ export default function SolanaEternalCanvas() {
   const retroStats = [
     { label: "PIXELS SOLD", value: totalPixelsSold.toLocaleString(), color: "text-red-600" },
     {
-      label: "SOL PER PIXEL",
-      value: isAdmin ? "0.00000001" : "0.005",
+      label: "CREDITS PER PIXEL",
+      value: isAdmin ? "0.1" : "50",
       color: isAdmin ? "text-blue-600" : "text-green-600",
     },
     { label: "PIXELS LEFT", value: (1000000 - totalPixelsSold).toLocaleString(), color: "text-blue-600" },
@@ -777,8 +823,8 @@ export default function SolanaEternalCanvas() {
                   >
                     SELECTED: {selectedArea.width}x{selectedArea.height} PIXELS (COST:{" "}
                     {isAdmin
-                      ? (selectedArea.width * selectedArea.height * 0.00000001).toFixed(8) + " SOL"
-                      : (selectedArea.width * selectedArea.height * 0.005).toFixed(3) + " SOL"}
+                      ? Math.ceil(selectedArea.width * selectedArea.height * 0.1) + " CREDITS"
+                      : selectedArea.width * selectedArea.height * 50 + " CREDITS"}
                     )
                   </Badge>
                   {!isValidSelection && hasOverlap(selectedArea) && (
@@ -819,8 +865,8 @@ export default function SolanaEternalCanvas() {
               </div>
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
-                  <p className="font-bold comic-font text-black text-lg">ADMIN: 0.00000001 SOL/PIXEL!</p>
-                  <p className="text-base text-black">MINIMAL BLOCKCHAIN COST</p>
+                  <p className="font-bold comic-font text-black text-lg">ADMIN: 0.1 CREDITS/PIXEL!</p>
+                  <p className="text-base text-black">MINIMAL COST</p>
                 </div>
               )}
               {connected ? (
@@ -831,6 +877,8 @@ export default function SolanaEternalCanvas() {
                   isAdmin={isAdmin}
                   pixelBlocks={pixelBlocks}
                   onRetractPixels={handleRetractPixels}
+                  userCredits={userCredits}
+                  onCreditsUpdate={setUserCredits}
                 />
               ) : (
                 <div className="p-3 bg-red-100 border-2 border-red-500 text-center">

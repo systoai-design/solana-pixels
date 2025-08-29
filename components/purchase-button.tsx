@@ -1,11 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { useWallet, useConnection } from "@solana/wallet-adapter-react"
-import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js"
+import { useWallet } from "@solana/wallet-adapter-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
 
 interface PurchaseButtonProps {
   selectedArea: { x: number; y: number; width: number; height: number } | null
@@ -30,6 +30,8 @@ interface PurchaseButtonProps {
     transaction_signature?: string
   }) => void
   onRetractPixels?: (area: { x: number; y: number; width: number; height: number }) => void
+  userCredits: number
+  onCreditsUpdate: (newCredits: number) => void
 }
 
 export function PurchaseButton({
@@ -39,9 +41,10 @@ export function PurchaseButton({
   pixelBlocks,
   onPurchaseSuccess,
   onRetractPixels,
+  userCredits,
+  onCreditsUpdate,
 }: PurchaseButtonProps) {
-  const { connected, publicKey, sendTransaction } = useWallet()
-  const { connection } = useConnection()
+  const { connected, publicKey } = useWallet()
   const [isPurchasing, setIsPurchasing] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
@@ -74,8 +77,6 @@ export function PurchaseButton({
     }
   }
 
-  const TREASURY_WALLET = new PublicKey("5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS") // Admin wallet as treasury
-
   const handlePurchase = async () => {
     if (!selectedArea || !publicKey || !connected) return
 
@@ -84,35 +85,35 @@ export function PurchaseButton({
 
     try {
       const pixelCount = selectedArea.width * selectedArea.height
-      const costInSOL = isAdmin ? pixelCount * 0.00000001 : pixelCount * 0.005
-      const costInLamports = Math.floor(costInSOL * LAMPORTS_PER_SOL)
+      const creditsNeeded = isAdmin ? Math.ceil(pixelCount * 0.1) : pixelCount * 50
 
-      console.log(`[v0] Starting purchase for ${pixelCount} pixels, cost: ${costInSOL} SOL`)
+      console.log(`[v0] Starting credit-based purchase for ${pixelCount} pixels, cost: ${creditsNeeded} credits`)
 
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: publicKey,
-          toPubkey: TREASURY_WALLET,
-          lamports: costInLamports,
-        }),
-      )
+      // Check if user has enough credits
+      if (userCredits < creditsNeeded) {
+        setPurchaseError(`Insufficient credits. Need ${creditsNeeded}, have ${userCredits}`)
+        return
+      }
 
-      // Get recent blockhash
-      const { blockhash } = await connection.getLatestBlockhash()
-      transaction.recentBlockhash = blockhash
-      transaction.feePayer = publicKey
+      // Deduct credits from user's balance
+      const supabase = createClient()
+      const newCreditsBalance = userCredits - creditsNeeded
 
-      console.log(`[v0] Sending ${costInSOL} SOL to treasury wallet...`)
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({ credits: newCreditsBalance })
+        .eq("wallet_address", publicKey.toString())
 
-      const signature = await sendTransaction(transaction, connection)
+      if (updateError) {
+        console.error("[v0] Failed to deduct credits:", updateError)
+        setPurchaseError("Failed to deduct credits from account")
+        return
+      }
 
-      console.log(`[v0] Transaction sent, signature: ${signature}`)
-      console.log(`[v0] Confirming transaction...`)
+      console.log(`[v0] Successfully deducted ${creditsNeeded} credits. New balance: ${newCreditsBalance}`)
 
-      // Wait for confirmation
-      await connection.confirmTransaction(signature, "confirmed")
-
-      console.log(`[v0] Transaction confirmed!`)
+      // Update local credits state
+      onCreditsUpdate(newCreditsBalance)
 
       const colors = ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#ffa500", "#800080"]
       const randomColor = colors[Math.floor(Math.random() * colors.length)]
@@ -124,10 +125,10 @@ export function PurchaseButton({
         height: selectedArea.height,
         owner: publicKey.toString(),
         color: randomColor,
-        transaction_signature: signature, // Use real transaction signature
+        transaction_signature: `credit_purchase_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`, // Credit-based purchase ID
       }
 
-      console.log(`[v0] Purchase successful! Block created:`, newBlock)
+      console.log(`[v0] Credit-based purchase successful! Block created:`, newBlock)
       onPurchaseSuccess(newBlock)
     } catch (error) {
       console.error("[v0] Purchase failed:", error)
@@ -153,6 +154,10 @@ export function PurchaseButton({
     )
   }
 
+  const pixelCount = selectedArea ? selectedArea.width * selectedArea.height : 0
+  const creditsNeeded = isAdmin ? Math.ceil(pixelCount * 0.1) : pixelCount * 50
+  const hasEnoughCredits = userCredits >= creditsNeeded
+
   return (
     <div className="space-y-2">
       {isAdmin && hasExistingPixels() ? (
@@ -173,7 +178,7 @@ export function PurchaseButton({
       ) : (
         <Button
           onClick={handlePurchase}
-          disabled={isPurchasing}
+          disabled={isPurchasing || !hasEnoughCredits}
           className={`w-full font-bold py-3 border-2 border-black shadow-lg disabled:bg-gray-400 ${
             isAdmin ? "bg-yellow-600 hover:bg-yellow-700 text-black" : "bg-red-600 hover:bg-red-700 text-white"
           }`}
@@ -186,7 +191,7 @@ export function PurchaseButton({
           ) : isAdmin ? (
             "👑 BUY PIXELS (ADMIN)"
           ) : (
-            "🔒 LOCK PIXELS FOREVER"
+            "🔒 BUY WITH CREDITS"
           )}
         </Button>
       )}
@@ -197,16 +202,16 @@ export function PurchaseButton({
         </Badge>
       )}
 
+      {!hasEnoughCredits && selectedArea && (
+        <Badge className="bg-orange-500 text-white text-xs w-full justify-center">
+          Need {creditsNeeded - userCredits} more credits
+        </Badge>
+      )}
+
       {selectedArea && (
         <div className="text-sm text-center bg-white p-2 border-2 border-black rounded font-bold text-black">
-          Cost:{" "}
-          {isAdmin ? (
-            <span className="text-blue-600">
-              {(selectedArea.width * selectedArea.height * 0.00000001).toFixed(8)} SOL
-            </span>
-          ) : (
-            <span className="text-red-600">{(selectedArea.width * selectedArea.height * 0.005).toFixed(3)} SOL</span>
-          )}
+          Cost: <span className={hasEnoughCredits ? "text-green-600" : "text-red-600"}>{creditsNeeded} Credits</span>
+          <div className="text-xs text-gray-600 mt-1">Your Balance: {userCredits} Credits</div>
         </div>
       )}
     </div>

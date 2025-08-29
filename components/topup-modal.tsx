@@ -32,7 +32,7 @@ export function TopupModal({ isOpen, onClose, walletAddress, onTopupSuccess }: T
         throw new Error("Amount must be greater than 0")
       }
 
-      const treasuryWallet = new PublicKey("11111111111111111111111111111112") // System Program ID as placeholder
+      const treasuryWallet = new PublicKey("BUbC5ugi4tnscNowHrNfvNsU5SZfMfcnBv7NotvdWyq8") // Replace with your treasury wallet
       const lamports = Math.floor(solAmount * LAMPORTS_PER_SOL)
 
       const transaction = new Transaction().add(
@@ -51,7 +51,7 @@ export function TopupModal({ isOpen, onClose, walletAddress, onTopupSuccess }: T
 
       const supabase = createClient()
 
-      const { data: existingUser } = await supabase
+      const { data: existingUser, error: fetchError } = await supabase
         .from("users")
         .select("id, credits")
         .eq("wallet_address", walletAddress)
@@ -61,11 +61,10 @@ export function TopupModal({ isOpen, onClose, walletAddress, onTopupSuccess }: T
       const currentCredits = existingUser?.credits || 0
       const newCredits = currentCredits + solAmount
 
-      if (!existingUser) {
-        const { data: newUser } = await supabase
+      if (!existingUser || fetchError) {
+        const { data: newUser, error: insertError } = await supabase
           .from("users")
           .insert({
-            id: walletAddress,
             wallet_address: walletAddress,
             username: walletAddress.slice(0, 8) + "...",
             total_pixels_owned: 0,
@@ -74,13 +73,18 @@ export function TopupModal({ isOpen, onClose, walletAddress, onTopupSuccess }: T
           })
           .select("id")
           .single()
+
+        if (insertError) throw insertError
         userId = newUser?.id
       } else {
-        await supabase.from("users").update({ credits: newCredits }).eq("id", userId)
+        const { error: updateError } = await supabase.from("users").update({ credits: newCredits }).eq("id", userId)
+
+        if (updateError) throw updateError
       }
 
       console.log("[v0] Credits added successfully:", newCredits)
       onTopupSuccess(newCredits)
+      onClose()
     } catch (error) {
       console.error("[v0] Top-up failed:", error)
       alert(`Top-up failed: ${error instanceof Error ? error.message : "Unknown error"}`)

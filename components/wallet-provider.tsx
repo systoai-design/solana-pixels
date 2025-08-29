@@ -13,7 +13,7 @@ import "@solana/wallet-adapter-react-ui/styles.css"
 
 export function SolanaWalletProvider({ children }: { children: React.ReactNode }) {
   const network = WalletAdapterNetwork.Mainnet
-  const endpoint = useMemo(() => "https://mainnet.helius-rpc.com/?api-key=public", [])
+  const endpoint = useMemo(() => "https://rpc.ankr.com/solana", [])
 
   const wallets = useMemo(() => {
     console.log("[v0] Initializing wallet adapters...")

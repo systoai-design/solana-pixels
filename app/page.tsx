@@ -11,7 +11,7 @@ import { WalletButton } from "@/components/wallet-button"
 import { PurchaseButton } from "@/components/purchase-button"
 import { ImageUploadModal } from "@/components/image-upload-modal"
 import { CreditsDisplay } from "@/components/credits-display"
-import { TopupModal } from "@/components/topup-modal"
+import { PaymentVerificationModal } from "@/components/payment-verification-modal"
 import { VisitorCounter, ScrollingMarquee, BlinkingText, RainbowText, RetroStats } from "@/components/retro-elements"
 import { createClient } from "@/lib/supabase/client"
 
@@ -57,7 +57,7 @@ export default function SolanaEternalCanvas() {
   const [user, setUser] = useState<any>(null)
   const [isAuthLoading, setIsAuthLoading] = useState(true)
   const [userCredits, setUserCredits] = useState(0)
-  const [topupModalOpen, setTopupModalOpen] = useState(false)
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false)
 
   const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
 
@@ -796,7 +796,7 @@ export default function SolanaEternalCanvas() {
             <WalletButton />
             {connected && (
               <div className="mt-4">
-                <CreditsDisplay credits={userCredits} onTopUp={() => setTopupModalOpen(true)} />
+                <CreditsDisplay credits={userCredits} onTopUp={() => setPaymentModalOpen(true)} />
               </div>
             )}
             {isAdmin && (
@@ -941,13 +941,13 @@ export default function SolanaEternalCanvas() {
       )}
 
       {connected && publicKey && (
-        <TopupModal
-          isOpen={topupModalOpen}
-          onClose={() => setTopupModalOpen(false)}
+        <PaymentVerificationModal
+          isOpen={paymentModalOpen}
+          onClose={() => setPaymentModalOpen(false)}
           walletAddress={publicKey.toString()}
-          onTopupSuccess={(newCredits) => {
+          onPaymentVerified={(newCredits) => {
             setUserCredits(newCredits)
-            setTopupModalOpen(false)
+            setPaymentModalOpen(false)
           }}
         />
       )}

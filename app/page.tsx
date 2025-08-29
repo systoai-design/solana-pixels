@@ -14,6 +14,7 @@ import { CreditsDisplay } from "@/components/credits-display"
 import { PaymentVerificationModal } from "@/components/payment-verification-modal"
 import { VisitorCounter, ScrollingMarquee, BlinkingText, RainbowText, RetroStats } from "@/components/retro-elements"
 import { createClient } from "@/lib/supabase/client"
+import { UsernameModal } from "@/components/username-modal"
 
 interface PixelBlock {
   id?: string
@@ -58,6 +59,8 @@ export default function SolanaEternalCanvas() {
   const [isAuthLoading, setIsAuthLoading] = useState(true)
   const [userCredits, setUserCredits] = useState(0)
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
+  const [usernameModalOpen, setUsernameModalOpen] = useState(false)
+  const [currentUsername, setCurrentUsername] = useState("")
 
   const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
 
@@ -65,9 +68,11 @@ export default function SolanaEternalCanvas() {
     if (connected && publicKey) {
       setUser({ id: publicKey.toString(), wallet_address: publicKey.toString() })
       loadUserCredits(publicKey.toString()).then(setUserCredits)
+      loadUserUsername(publicKey.toString()).then(setCurrentUsername)
     } else {
       setUser(null)
       setUserCredits(0)
+      setCurrentUsername("")
     }
     setIsAuthLoading(false)
   }, [connected, publicKey])
@@ -221,7 +226,8 @@ export default function SolanaEternalCanvas() {
         .select(`
           *,
           users!pixel_blocks_owner_id_fkey (
-            wallet_address
+            wallet_address,
+            username
           )
         `)
         .order("created_at", { ascending: true })
@@ -533,9 +539,11 @@ export default function SolanaEternalCanvas() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
+    // Draw white background
     ctx.fillStyle = "#ffffff"
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
+    // Draw grid lines for available areas
     ctx.strokeStyle = "#e0e0e0"
     ctx.lineWidth = 1
     const gridSize = 10
@@ -554,46 +562,86 @@ export default function SolanaEternalCanvas() {
       ctx.stroke()
     }
 
+    // Draw owned blocks with enhanced visual states
     pixelBlocks.forEach((block) => {
+      const isOwnedByCurrentUser = connected && publicKey && block.owner === publicKey.toString()
+
       if (block.imageUrl) {
+        // STATE: Owned block with image (advertisement)
         const img = new Image()
+        img.crossOrigin = "anonymous"
         img.onload = () => {
+          // Draw the advertisement image
           ctx.drawImage(img, block.x, block.y, block.width, block.height)
 
-          ctx.strokeStyle = "#000000"
-          ctx.lineWidth = 2
+          // Add border to indicate it's owned
+          ctx.strokeStyle = isOwnedByCurrentUser ? "#22c55e" : "#3b82f6" // Green for user-owned, blue for others
+          ctx.lineWidth = 3
           ctx.strokeRect(block.x, block.y, block.width, block.height)
 
-          if (connected && publicKey && block.owner === publicKey.toString()) {
-            ctx.strokeStyle = "#ffff00"
-            ctx.lineWidth = 3
-            ctx.strokeRect(block.x - 1, block.y - 1, block.width + 2, block.height + 2)
+          if (!isOwnedByCurrentUser) {
+            // Show owner username for other people's blocks
+            loadBlockOwnerUsername(block.owner || "").then((username) => {
+              ctx.fillStyle = "rgba(59, 130, 246, 0.9)"
+              ctx.fillRect(block.x, block.y + block.height - 20, Math.min(username.length * 8, block.width), 20)
+              ctx.fillStyle = "#ffffff"
+              ctx.font = "10px monospace"
+              ctx.fillText(username, block.x + 2, block.y + block.height - 6)
+            })
+          } else {
+            // Add "YOUR AD" label for user-owned blocks
+            ctx.fillStyle = "rgba(34, 197, 94, 0.9)"
+            ctx.fillRect(block.x, block.y, Math.min(60, block.width), 20)
+            ctx.fillStyle = "#ffffff"
+            ctx.font = "12px monospace"
+            ctx.fillText("YOUR AD", block.x + 2, block.y + 14)
           }
         }
         img.src = block.imageUrl
       } else {
-        ctx.fillStyle = block.color || "#cccccc"
+        // STATE: Owned block without image (placeholder)
+        ctx.fillStyle = isOwnedByCurrentUser ? "#dcfce7" : "#dbeafe" // Light green for user, light blue for others
         ctx.fillRect(block.x, block.y, block.width, block.height)
 
-        ctx.strokeStyle = "#000000"
-        ctx.lineWidth = 2
+        // Add border
+        ctx.strokeStyle = isOwnedByCurrentUser ? "#22c55e" : "#3b82f6"
+        ctx.lineWidth = 3
         ctx.strokeRect(block.x, block.y, block.width, block.height)
 
-        if (connected && publicKey && block.owner === publicKey.toString()) {
-          ctx.strokeStyle = "#ffff00"
-          ctx.lineWidth = 3
-          ctx.strokeRect(block.x - 1, block.y - 1, block.width + 2, block.height + 2)
+        if (isOwnedByCurrentUser) {
+          // Add "UPLOAD IMAGE" text for owned blocks without images
+          ctx.fillStyle = "#16a34a"
+          ctx.font = "10px monospace"
+          ctx.textAlign = "center"
+          const centerX = block.x + block.width / 2
+          const centerY = block.y + block.height / 2
+          ctx.fillText("UPLOAD", centerX, centerY - 5)
+          ctx.fillText("IMAGE", centerX, centerY + 8)
+          ctx.textAlign = "left"
+        } else {
+          // Show owner username for blocks owned by others
+          loadBlockOwnerUsername(block.owner || "").then((username) => {
+            ctx.fillStyle = "#2563eb"
+            ctx.font = "10px monospace"
+            ctx.textAlign = "center"
+            const centerX = block.x + block.width / 2
+            const centerY = block.y + block.height / 2
+            ctx.fillText(`Owned by`, centerX, centerY - 5)
+            ctx.fillText(username, centerX, centerY + 8)
+            ctx.textAlign = "left"
+          })
         }
       }
     })
 
+    // Draw selection area
     if (selectedArea) {
-      ctx.strokeStyle = "#ff0000"
+      ctx.strokeStyle = "#ef4444"
       ctx.lineWidth = 2
       ctx.setLineDash([5, 5])
       ctx.strokeRect(selectedArea.x, selectedArea.y, selectedArea.width, selectedArea.height)
 
-      ctx.fillStyle = "rgba(255, 0, 0, 0.1)"
+      ctx.fillStyle = "rgba(239, 68, 68, 0.1)"
       ctx.fillRect(selectedArea.x, selectedArea.y, selectedArea.width, selectedArea.height)
       ctx.setLineDash([])
     }
@@ -659,18 +707,29 @@ export default function SolanaEternalCanvas() {
         coords.y < block.y + block.height,
     )
 
-    if (clickedBlock && clickedBlock.url) {
-      let finalUrl = clickedBlock.url.trim()
+    if (clickedBlock) {
+      // If block has a URL, open it (advertisement click)
+      if (clickedBlock.url) {
+        let finalUrl = clickedBlock.url.trim()
 
-      if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
-        finalUrl = "https://" + finalUrl
-      }
+        if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+          finalUrl = "https://" + finalUrl
+        }
 
-      try {
-        window.open(finalUrl, "_blank", "noopener,noreferrer")
-      } catch (error) {
-        console.error("[v0] Failed to open URL:", error)
-        window.location.href = finalUrl
+        try {
+          window.open(finalUrl, "_blank", "noopener,noreferrer")
+          console.log("[v0] Advertisement clicked:", finalUrl)
+        } catch (error) {
+          console.error("[v0] Failed to open advertisement URL:", error)
+        }
+      } else {
+        // If it's user's own block without URL, show upload modal
+        const isOwnedByCurrentUser = connected && publicKey && clickedBlock.owner === publicKey.toString()
+        if (isOwnedByCurrentUser) {
+          const blockIndex = pixelBlocks.findIndex((b) => b.id === clickedBlock.id)
+          setSelectedBlockForUpload({ block: clickedBlock, index: blockIndex })
+          setUploadModalOpen(true)
+        }
       }
     }
   }
@@ -728,6 +787,42 @@ export default function SolanaEternalCanvas() {
     } catch (error) {
       console.error("[v0] Error loading credits:", error)
       return 0
+    }
+  }
+
+  const loadUserUsername = async (walletAddress: string) => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("users")
+        .select("username")
+        .eq("wallet_address", walletAddress)
+        .single()
+
+      if (error) {
+        console.error("[v0] Failed to load username:", error)
+        return walletAddress.slice(0, 8) + "..."
+      }
+
+      return data?.username || walletAddress.slice(0, 8) + "..."
+    } catch (error) {
+      console.error("[v0] Error loading username:", error)
+      return walletAddress.slice(0, 8) + "..."
+    }
+  }
+
+  const loadBlockOwnerUsername = async (ownerWallet: string) => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.from("users").select("username").eq("wallet_address", ownerWallet).single()
+
+      if (error) {
+        return ownerWallet.slice(0, 8) + "..."
+      }
+
+      return data?.username || ownerWallet.slice(0, 8) + "..."
+    } catch (error) {
+      return ownerWallet.slice(0, 8) + "..."
     }
   }
 
@@ -839,7 +934,14 @@ export default function SolanaEternalCanvas() {
         <div className="space-y-6">
           <Card className="p-4 bg-white border-4 border-black">
             <h3 className="font-bold text-xl mb-4 text-center comic-font text-black">🔗 CONNECT WALLET</h3>
-            <WalletButton />
+            <div className="flex gap-2">
+              <WalletButton />
+              {connected && (
+                <Button onClick={() => setUsernameModalOpen(true)} variant="outline" size="sm">
+                  👤 {currentUsername}
+                </Button>
+              )}
+            </div>
             {connected && (
               <div className="mt-4">
                 <CreditsDisplay credits={userCredits} onTopUp={() => setPaymentModalOpen(true)} />
@@ -997,6 +1099,16 @@ export default function SolanaEternalCanvas() {
             setUserCredits(newCredits)
             setPaymentModalOpen(false)
           }}
+        />
+      )}
+
+      {usernameModalOpen && (
+        <UsernameModal
+          isOpen={usernameModalOpen}
+          onClose={() => setUsernameModalOpen(false)}
+          walletAddress={publicKey?.toString() || ""}
+          currentUsername={currentUsername}
+          onUsernameUpdate={setCurrentUsername}
         />
       )}
     </div>

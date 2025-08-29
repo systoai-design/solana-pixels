@@ -48,15 +48,26 @@ export function PurchaseButton({
   const [isPurchasing, setIsPurchasing] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
-  const hasExistingPixels = () => {
-    if (!selectedArea || !pixelBlocks || !Array.isArray(pixelBlocks)) return false
-    return pixelBlocks.some(
+  const getExistingBlocks = () => {
+    if (!selectedArea || !pixelBlocks || !Array.isArray(pixelBlocks)) return []
+    return pixelBlocks.filter(
       (block) =>
         block.x < selectedArea.x + selectedArea.width &&
         block.x + block.width > selectedArea.x &&
         block.y < selectedArea.y + selectedArea.height &&
         block.y + block.height > selectedArea.y,
     )
+  }
+
+  const isPurchaseWar = () => {
+    const existingBlocks = getExistingBlocks()
+    return existingBlocks.length > 0 && existingBlocks.some((block) => block.owner !== publicKey?.toString())
+  }
+
+  const getExistingOwners = () => {
+    const existingBlocks = getExistingBlocks()
+    const owners = [...new Set(existingBlocks.map((block) => block.owner))]
+    return owners.filter((owner) => owner !== publicKey?.toString())
   }
 
   const handleRetract = async () => {
@@ -86,8 +97,11 @@ export function PurchaseButton({
     try {
       const pixelCount = selectedArea.width * selectedArea.height
       const creditsNeeded = isAdmin ? Math.ceil(pixelCount * 0.1) : pixelCount * 50
+      const isWar = isPurchaseWar()
 
-      console.log(`[v0] Starting credit-based purchase for ${pixelCount} pixels, cost: ${creditsNeeded} credits`)
+      console.log(
+        `[v0] Starting ${isWar ? "purchase war" : "new purchase"} for ${pixelCount} pixels, cost: ${creditsNeeded} credits`,
+      )
 
       // Check if user has enough credits
       if (userCredits < creditsNeeded) {
@@ -125,10 +139,10 @@ export function PurchaseButton({
         height: selectedArea.height,
         owner: publicKey.toString(),
         color: randomColor,
-        transaction_signature: `credit_purchase_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`, // Credit-based purchase ID
+        transaction_signature: `${isWar ? "war" : "credit"}_purchase_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
       }
 
-      console.log(`[v0] Credit-based purchase successful! Block created:`, newBlock)
+      console.log(`[v0] ${isWar ? "Purchase war" : "Credit-based purchase"} successful! Block created:`, newBlock)
       onPurchaseSuccess(newBlock)
     } catch (error) {
       console.error("[v0] Purchase failed:", error)
@@ -146,10 +160,10 @@ export function PurchaseButton({
     )
   }
 
-  if (!isValidSelection) {
+  if (!selectedArea || selectedArea.width < 10 || selectedArea.height < 10) {
     return (
       <Button disabled className="w-full bg-gray-400 text-black font-bold py-3 border-2 border-black shadow-lg">
-        Select Valid Area
+        Select Valid Area (Min 10x10)
       </Button>
     )
   }
@@ -157,10 +171,21 @@ export function PurchaseButton({
   const pixelCount = selectedArea ? selectedArea.width * selectedArea.height : 0
   const creditsNeeded = isAdmin ? Math.ceil(pixelCount * 0.1) : pixelCount * 50
   const hasEnoughCredits = userCredits >= creditsNeeded
+  const isWar = isPurchaseWar()
+  const existingOwners = getExistingOwners()
 
   return (
     <div className="space-y-2">
-      {isAdmin && hasExistingPixels() ? (
+      {isWar && existingOwners.length > 0 && (
+        <div className="bg-orange-100 border-2 border-orange-500 p-2 rounded">
+          <p className="text-orange-800 font-bold text-xs text-center">⚔️ PURCHASE WAR! ⚔️</p>
+          <p className="text-orange-700 text-xs text-center">
+            Taking over blocks from: {existingOwners.map((owner) => owner.slice(0, 8) + "...").join(", ")}
+          </p>
+        </div>
+      )}
+
+      {isAdmin && getExistingBlocks().length > 0 ? (
         <Button
           onClick={handleRetract}
           disabled={isPurchasing}
@@ -180,7 +205,11 @@ export function PurchaseButton({
           onClick={handlePurchase}
           disabled={isPurchasing || !hasEnoughCredits}
           className={`w-full font-bold py-3 border-2 border-black shadow-lg disabled:bg-gray-400 ${
-            isAdmin ? "bg-yellow-600 hover:bg-yellow-700 text-black" : "bg-red-600 hover:bg-red-700 text-white"
+            isWar
+              ? "bg-orange-600 hover:bg-orange-700 text-white"
+              : isAdmin
+                ? "bg-yellow-600 hover:bg-yellow-700 text-black"
+                : "bg-red-600 hover:bg-red-700 text-white"
           }`}
         >
           {isPurchasing ? (
@@ -188,6 +217,8 @@ export function PurchaseButton({
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Processing...
             </>
+          ) : isWar ? (
+            "⚔️ TAKEOVER BLOCKS!"
           ) : isAdmin ? (
             "👑 BUY PIXELS (ADMIN)"
           ) : (
@@ -212,6 +243,7 @@ export function PurchaseButton({
         <div className="text-sm text-center bg-white p-2 border-2 border-black rounded font-bold text-black">
           Cost: <span className={hasEnoughCredits ? "text-green-600" : "text-red-600"}>{creditsNeeded} Credits</span>
           <div className="text-xs text-gray-600 mt-1">Your Balance: {userCredits} Credits</div>
+          {isWar && <div className="text-xs text-orange-600 mt-1 font-bold">⚔️ PURCHASE WAR MODE ⚔️</div>}
         </div>
       )}
     </div>

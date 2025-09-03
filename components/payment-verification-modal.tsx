@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Copy, CheckCircle, AlertCircle } from "lucide-react"
 import { Connection, PublicKey } from "@solana/web3.js"
 import { ErrorModal } from "./error-modal"
+import { createClient } from "@/lib/supabase/client"
 
 interface PaymentVerificationModalProps {
   isOpen: boolean
@@ -37,33 +38,52 @@ export function PaymentVerificationModal({
   }
 
   const getOrCreateUser = async (supabase: any, walletAddress: string) => {
-    // First, try to find existing user
-    const { data: existingUser, error: findError } = await supabase
-      .from("users")
-      .select("id, credits")
-      .eq("wallet_address", walletAddress)
-      .single()
+    try {
+      // First, try to find existing user
+      const { data: existingUser, error: findError } = await supabase
+        .from("users")
+        .select("id, credits")
+        .eq("wallet_address", walletAddress)
+        .single()
 
-    if (existingUser && !findError) {
-      return existingUser
+      if (existingUser && !findError) {
+        console.log("[v0] Found existing user:", existingUser.id)
+        return existingUser
+      }
+
+      // If user doesn't exist, create new user with proper defaults
+      console.log("[v0] Creating new user for wallet:", walletAddress)
+      const { data: newUser, error: createError } = await supabase
+        .from("users")
+        .insert({
+          wallet_address: walletAddress,
+          credits: 0,
+          total_spent: 0,
+          total_pixels_owned: 0,
+          username: null,
+          avatar_url: null,
+        })
+        .select("id, credits")
+        .single()
+
+      if (createError) {
+        console.error("[v0] Failed to create user:", createError)
+        // Provide more specific error messages
+        if (createError.code === "23505") {
+          throw new Error("User account already exists but could not be retrieved")
+        } else if (createError.code === "42501") {
+          throw new Error("Database permission error - please contact support")
+        } else {
+          throw new Error(`Failed to create user account: ${createError.message}`)
+        }
+      }
+
+      console.log("[v0] Successfully created new user:", newUser.id)
+      return newUser
+    } catch (error) {
+      console.error("[v0] Error in getOrCreateUser:", error)
+      throw error
     }
-
-    // If user doesn't exist, create new user
-    const { data: newUser, error: createError } = await supabase
-      .from("users")
-      .insert({
-        wallet_address: walletAddress,
-        credits: 0,
-      })
-      .select("id, credits")
-      .single()
-
-    if (createError) {
-      console.error("[v0] Failed to create user:", createError)
-      throw new Error("Failed to create user account")
-    }
-
-    return newUser
   }
 
   const verifyTransaction = async () => {
@@ -125,7 +145,7 @@ export function PaymentVerificationModal({
         throw new Error("Minimum transfer amount is 0.001 SOL (1 credit)")
       }
 
-      const supabase = (await import("@/lib/supabase/client")).createClient()
+      const supabase = createClient()
 
       const user = await getOrCreateUser(supabase, walletAddress)
       const newTotalCredits = user.credits + credits
@@ -135,7 +155,7 @@ export function PaymentVerificationModal({
 
       if (updateError) {
         console.error("[v0] Failed to update user credits:", updateError)
-        throw new Error("Failed to update credits in database")
+        throw new Error(`Failed to update credits in database: ${updateError.message}`)
       }
 
       // Record the payment
@@ -167,7 +187,12 @@ export function PaymentVerificationModal({
       setErrorMessage(errorMsg)
       setVerificationStatus("error")
 
-      if (errorMsg.includes("database") || errorMsg.includes("user") || errorMsg.includes("credits")) {
+      if (
+        errorMsg.includes("database") ||
+        errorMsg.includes("user") ||
+        errorMsg.includes("credits") ||
+        errorMsg.includes("permission")
+      ) {
         setShowErrorModal(true)
       }
     } finally {

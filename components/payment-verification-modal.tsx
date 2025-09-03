@@ -66,10 +66,9 @@ export function PaymentVerificationModal({
           total_spent: 0,
           total_pixels_owned: 0,
           username: walletAddress.slice(0, 8) + "...",
-          avatar_url: null,
         })
         .select("id, credits")
-        .maybeSingle()
+        .single()
 
       if (createError) {
         // Handle unique constraint violation (race condition)
@@ -89,10 +88,6 @@ export function PaymentVerificationModal({
 
         console.error("[v0] Failed to create user:", createError)
         throw new Error(`Failed to create user account: ${createError.message}`)
-      }
-
-      if (!newUser) {
-        throw new Error("Failed to create user account: No user data returned")
       }
 
       console.log("[v0] Successfully created new user:", newUser.id)

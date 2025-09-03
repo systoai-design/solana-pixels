@@ -32,8 +32,6 @@ interface PixelBlock {
 const ADMIN_WALLETS = [
   "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS", // Original admin
   "BUbC5ugi4tnscNowHrNfvNsU5SZfMfcnBv7NotvdWyq8", // Added new admin wallet
-  "Gu3zyZZtaVWEiy2UCdhKasR2a5ZwMoDwffvoT2NQodCr", // New admin wallet 1
-  "3wGtE2o4wy2y6NpjjRJKNMkKCHA5jcvdA19Q5S34cxrg", // New admin wallet 2
 ]
 
 export default function PixelCanvas() {
@@ -95,55 +93,32 @@ export default function PixelCanvas() {
     try {
       const supabase = createClient()
 
-      const { data: existingUser, error: findError } = await supabase
-        .from("users")
-        .select("id")
+      // Simply return the wallet address as the identifier - no complex user creation needed
+      const { data: existingCredits, error: findError } = await supabase
+        .from("wallet_credits")
+        .select("wallet_address")
         .eq("wallet_address", walletAddress)
         .maybeSingle()
 
-      if (existingUser && !findError) {
-        return existingUser.id
+      if (existingCredits && !findError) {
+        return walletAddress
       }
 
-      const { data: newUser, error: createError } = await supabase
-        .from("users")
-        .upsert(
-          {
-            wallet_address: walletAddress,
-            username: walletAddress.slice(0, 8) + "...",
-            total_pixels_owned: 0,
-            total_spent: 0,
-            credits: 0,
-          },
-          {
-            onConflict: "wallet_address",
-            ignoreDuplicates: false,
-          },
-        )
-        .select("id")
-        .single()
+      // Create wallet credits entry if it doesn't exist
+      const { error: createError } = await supabase.from("wallet_credits").upsert({
+        wallet_address: walletAddress,
+        credits: 0,
+        username: walletAddress.slice(0, 8) + "...",
+      })
 
       if (createError) {
-        console.error("[v0] Failed to create user:", createError)
-        if (createError.code === "23505") {
-          // Try to fetch the existing user
-          const { data: retryUser } = await supabase
-            .from("users")
-            .select("id")
-            .eq("wallet_address", walletAddress)
-            .single()
-
-          if (retryUser) {
-            return retryUser.id
-          }
-        }
-        return walletAddress // Fallback to wallet address as ID
+        console.error("[v0] Failed to create wallet credits:", createError)
       }
 
-      return newUser.id
+      return walletAddress
     } catch (error) {
       console.error("[v0] Error in getOrCreateUser:", error)
-      return walletAddress // Fallback to wallet address as ID
+      return walletAddress
     }
   }
 
@@ -261,16 +236,7 @@ export default function PixelCanvas() {
 
       const supabase = createClient()
 
-      const { data, error } = await supabase
-        .from("pixel_blocks")
-        .select(`
-          *,
-          users!pixel_blocks_owner_id_fkey (
-            wallet_address,
-            username
-          )
-        `)
-        .order("created_at", { ascending: true })
+      const { data, error } = await supabase.from("pixel_blocks").select("*").order("created_at", { ascending: true })
 
       if (error) {
         console.error("[v0] Failed to load blocks from database:", error)
@@ -283,7 +249,7 @@ export default function PixelCanvas() {
         y: block.start_y,
         width: block.width,
         height: block.height,
-        owner: block.users?.wallet_address || undefined,
+        owner: block.owner_id || undefined, // Use owner_id directly as wallet address
         imageUrl: block.image_url || undefined,
         url: block.link_url || undefined,
         color: block.image_url ? undefined : "#" + Math.floor(Math.random() * 16777215).toString(16),
@@ -502,12 +468,21 @@ export default function PixelCanvas() {
       if (allDeleted && totalPixelsToRefund > 0) {
         try {
           const supabase = createClient()
-          const newCreditsBalance = userCredits + refundAmount
 
-          const { error: updateError } = await supabase
-            .from("users")
-            .update({ credits: newCreditsBalance })
+          const { data: currentWallet, error: fetchError } = await supabase
+            .from("wallet_credits")
+            .select("credits")
             .eq("wallet_address", publicKey?.toString())
+            .maybeSingle()
+
+          const currentCredits = currentWallet?.credits || 0
+          const newCreditsBalance = currentCredits + refundAmount
+
+          const { error: updateError } = await supabase.from("wallet_credits").upsert({
+            wallet_address: publicKey?.toString(),
+            credits: newCreditsBalance,
+            username: publicKey?.toString().slice(0, 8) + "...",
+          })
 
           if (!updateError) {
             console.log(
@@ -568,12 +543,21 @@ export default function PixelCanvas() {
       if (deleteSuccess) {
         try {
           const supabase = createClient()
-          const newCreditsBalance = userCredits + refundAmount
 
-          const { error: updateError } = await supabase
-            .from("users")
-            .update({ credits: newCreditsBalance })
+          const { data: currentWallet, error: fetchError } = await supabase
+            .from("wallet_credits")
+            .select("credits")
             .eq("wallet_address", publicKey?.toString())
+            .maybeSingle()
+
+          const currentCredits = currentWallet?.credits || 0
+          const newCreditsBalance = currentCredits + refundAmount
+
+          const { error: updateError } = await supabase.from("wallet_credits").upsert({
+            wallet_address: publicKey?.toString(),
+            credits: newCreditsBalance,
+            username: publicKey?.toString().slice(0, 8) + "...",
+          })
 
           if (!updateError) {
             console.log(`[v0] Refunded ${refundAmount} credits for individual block. New balance: ${newCreditsBalance}`)
@@ -893,11 +877,25 @@ export default function PixelCanvas() {
       }
 
       const supabase = createClient()
-      const { data, error } = await supabase
-        .from("users")
+
+      let { data, error } = await supabase
+        .from("wallet_credits")
         .select("credits")
         .eq("wallet_address", walletAddress)
         .maybeSingle()
+
+      // If wallet_credits table doesn't exist, try the old users table
+      if (error && error.message.includes("wallet_credits")) {
+        console.log("[v0] wallet_credits table not found, trying users table")
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("credits")
+          .eq("wallet_address", walletAddress)
+          .maybeSingle()
+
+        data = userData
+        error = userError
+      }
 
       if (error) {
         console.error("[v0] Failed to load user credits:", error)
@@ -914,11 +912,24 @@ export default function PixelCanvas() {
   const loadUserUsername = async (walletAddress: string) => {
     try {
       const supabase = createClient()
-      const { data, error } = await supabase
-        .from("users")
+
+      let { data, error } = await supabase
+        .from("wallet_credits")
         .select("username")
         .eq("wallet_address", walletAddress)
-        .single()
+        .maybeSingle()
+
+      // If wallet_credits table doesn't exist, try the old users table
+      if (error && error.message.includes("wallet_credits")) {
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("username")
+          .eq("wallet_address", walletAddress)
+          .maybeSingle()
+
+        data = userData
+        error = userError
+      }
 
       if (error) {
         return walletAddress.slice(0, 8) + "..."
@@ -933,7 +944,24 @@ export default function PixelCanvas() {
   const loadBlockOwnerUsername = async (ownerWallet: string) => {
     try {
       const supabase = createClient()
-      const { data, error } = await supabase.from("users").select("username").eq("wallet_address", ownerWallet).single()
+
+      let { data, error } = await supabase
+        .from("wallet_credits")
+        .select("username")
+        .eq("wallet_address", ownerWallet)
+        .maybeSingle()
+
+      // If wallet_credits table doesn't exist, try the old users table
+      if (error && error.message.includes("wallet_credits")) {
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("username")
+          .eq("wallet_address", ownerWallet)
+          .maybeSingle()
+
+        data = userData
+        error = userError
+      }
 
       if (error) {
         return ownerWallet.slice(0, 8) + "..."

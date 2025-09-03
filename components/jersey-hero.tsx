@@ -11,8 +11,8 @@ export function JerseyHero() {
       </p>
 
       <div className="space-y-4">
-        <div className="jersey-font text-xl text-blue-600 rainbow-text">100 CREDITS PER PIXEL</div>
-        <div className="jersey-font text-sm text-gray-600">≈ 0.0001 SOL PER PIXEL</div>
+        <div className="jersey-font text-xl text-blue-600 rainbow-text">1 CREDIT PER PIXEL</div>
+        <div className="jersey-font text-sm text-gray-600">≈ 0.000001 SOL PER PIXEL</div>
 
         <button className="retro-button jersey-font text-xl px-8 py-4 bg-yellow-300 hover:bg-yellow-400 border-4 border-black">
           START BUYING PIXELS

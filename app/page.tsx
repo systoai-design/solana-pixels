@@ -138,7 +138,7 @@ export default function PixelCanvas() {
         return false
       }
 
-      const pricePerPixel = isAdmin ? 0.1 : 100
+      const pricePerPixel = isAdmin ? 0.1 : 1
       const transactionSignature =
         block.transaction_signature || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
 
@@ -455,7 +455,7 @@ export default function PixelCanvas() {
       })
 
       const totalPixelsToRefund = blocksToRemove.reduce((total, block) => total + block.width * block.height, 0)
-      const refundAmount = isAdmin ? Math.ceil(totalPixelsToRefund * 0.1) : totalPixelsToRefund * 100
+      const refundAmount = isAdmin ? Math.ceil(totalPixelsToRefund * 0.1) : totalPixelsToRefund * 1
 
       let allDeleted = true
       for (const block of blocksToRemove) {
@@ -536,7 +536,7 @@ export default function PixelCanvas() {
       console.log(`[v0] Admin retracting individual block:`, blockToRemove)
 
       const pixelsToRefund = blockToRemove.width * blockToRemove.height
-      const refundAmount = isAdmin ? Math.ceil(pixelsToRefund * 0.1) : pixelsToRefund * 100
+      const refundAmount = isAdmin ? Math.ceil(pixelsToRefund * 0.1) : pixelsToRefund * 1
 
       const deleteSuccess = await deletePixelBlockFromDatabase(blockToRemove)
 
@@ -860,7 +860,7 @@ export default function PixelCanvas() {
     { label: "PIXELS SOLD", value: totalPixelsSold.toLocaleString(), color: "text-red-600" },
     {
       label: "CREDITS PER PIXEL",
-      value: isAdmin ? "0.1" : "100",
+      value: isAdmin ? "0.1" : "1",
       color: isAdmin ? "text-blue-600" : "text-green-600",
     },
     { label: "PIXELS LEFT", value: (1000000 - totalPixelsSold).toLocaleString(), color: "text-blue-600" },
@@ -1116,8 +1116,8 @@ export default function PixelCanvas() {
               )}
               {!isAdmin && (
                 <div className="bg-blue-200 p-3 border-2 border-black">
-                  <p className="font-bold comic-font text-black text-lg">100 CREDITS/PIXEL</p>
-                  <p className="text-base text-black">≈ {creditsToSol(100)} SOL/PIXEL</p>
+                  <p className="font-bold comic-font text-black text-lg">1 CREDIT/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToSol(1)} SOL/PIXEL</p>
                 </div>
               )}
               {connected ? (

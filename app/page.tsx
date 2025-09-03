@@ -99,7 +99,7 @@ export default function PixelCanvas() {
         .from("users")
         .select("id")
         .eq("wallet_address", walletAddress)
-        .single()
+        .maybeSingle()
 
       if (existingUser && !findError) {
         return existingUser.id
@@ -107,26 +107,43 @@ export default function PixelCanvas() {
 
       const { data: newUser, error: createError } = await supabase
         .from("users")
-        .insert({
-          id: walletAddress,
-          wallet_address: walletAddress,
-          username: walletAddress.slice(0, 8) + "...",
-          total_pixels_owned: 0,
-          total_spent: 0,
-          credits: 0,
-        })
+        .upsert(
+          {
+            wallet_address: walletAddress,
+            username: walletAddress.slice(0, 8) + "...",
+            total_pixels_owned: 0,
+            total_spent: 0,
+            credits: 0,
+          },
+          {
+            onConflict: "wallet_address",
+            ignoreDuplicates: false,
+          },
+        )
         .select("id")
         .single()
 
       if (createError) {
         console.error("[v0] Failed to create user:", createError)
-        return walletAddress
+        if (createError.code === "23505") {
+          // Try to fetch the existing user
+          const { data: retryUser } = await supabase
+            .from("users")
+            .select("id")
+            .eq("wallet_address", walletAddress)
+            .single()
+
+          if (retryUser) {
+            return retryUser.id
+          }
+        }
+        return walletAddress // Fallback to wallet address as ID
       }
 
       return newUser.id
     } catch (error) {
       console.error("[v0] Error in getOrCreateUser:", error)
-      return walletAddress
+      return walletAddress // Fallback to wallet address as ID
     }
   }
 
@@ -867,12 +884,20 @@ export default function PixelCanvas() {
 
   const loadUserCredits = async (walletAddress: string) => {
     try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      if (!supabaseUrl || !supabaseKey) {
+        console.log("[v0] Supabase environment variables not configured, returning 0 credits")
+        return 0
+      }
+
       const supabase = createClient()
       const { data, error } = await supabase
         .from("users")
         .select("credits")
         .eq("wallet_address", walletAddress)
-        .single()
+        .maybeSingle()
 
       if (error) {
         console.error("[v0] Failed to load user credits:", error)

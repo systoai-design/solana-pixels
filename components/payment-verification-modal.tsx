@@ -49,15 +49,15 @@ export function PaymentVerificationModal({
         .from("users")
         .select("id, credits")
         .eq("wallet_address", walletAddress)
-        .single()
+        .maybeSingle()
 
       if (existingUser && !findError) {
         console.log("[v0] Found existing user:", existingUser.id)
         return existingUser
       }
 
-      // If user doesn't exist, create new user with proper defaults
       console.log("[v0] Creating new user for wallet:", walletAddress)
+
       const { data: newUser, error: createError } = await supabase
         .from("users")
         .insert({
@@ -65,22 +65,34 @@ export function PaymentVerificationModal({
           credits: 0,
           total_spent: 0,
           total_pixels_owned: 0,
-          username: null,
+          username: walletAddress.slice(0, 8) + "...",
           avatar_url: null,
         })
         .select("id, credits")
-        .single()
+        .maybeSingle()
 
       if (createError) {
-        console.error("[v0] Failed to create user:", createError)
-        // Provide more specific error messages
+        // Handle unique constraint violation (race condition)
         if (createError.code === "23505") {
-          throw new Error("User account already exists but could not be retrieved")
-        } else if (createError.code === "42501") {
-          throw new Error("Database permission error - please contact support")
-        } else {
-          throw new Error(`Failed to create user account: ${createError.message}`)
+          console.log("[v0] User already exists (race condition), fetching existing user")
+          const { data: existingUser, error: fetchError } = await supabase
+            .from("users")
+            .select("id, credits")
+            .eq("wallet_address", walletAddress)
+            .single()
+
+          if (fetchError) {
+            throw new Error(`Failed to fetch existing user: ${fetchError.message}`)
+          }
+          return existingUser
         }
+
+        console.error("[v0] Failed to create user:", createError)
+        throw new Error(`Failed to create user account: ${createError.message}`)
+      }
+
+      if (!newUser) {
+        throw new Error("Failed to create user account: No user data returned")
       }
 
       console.log("[v0] Successfully created new user:", newUser.id)
@@ -94,6 +106,18 @@ export function PaymentVerificationModal({
   const verifyTransaction = async () => {
     if (!transactionSignature.trim()) {
       setErrorMessage("Please enter a transaction signature")
+      setVerificationStatus("error")
+      return
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.log("[v0] Supabase environment variables not configured")
+      setErrorMessage(
+        "Database connection not available. Please contact support to complete your payment verification.",
+      )
       setVerificationStatus("error")
       return
     }

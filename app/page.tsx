@@ -32,6 +32,8 @@ interface PixelBlock {
 const ADMIN_WALLETS = [
   "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS", // Original admin
   "BUbC5ugi4tnscNowHrNfvNsU5SZfMfcnBv7NotvdWyq8", // Added new admin wallet
+  "Gu3zyZZtaVWEiy2UCdhKasR2a5ZwMoDwffvoT2NQodCr", // New admin wallet 1
+  "3wGtE2o4wy2y6NpjjRJKNMkKCHA5jcvdA19Q5S34cxrg", // New admin wallet 2
 ]
 
 export default function PixelCanvas() {

@@ -18,8 +18,13 @@ interface PaymentVerificationModalProps {
 }
 
 const ADMIN_WALLET = "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS"
-const SOL_TO_CREDITS_RATE = 1000 // 1 SOL = 1,000 credits
-const RPC_ENDPOINT = "https://solana-rpc.publicnode.com"
+const SOL_TO_CREDITS_RATE = 1000000 // Updated to 1 SOL = 1,000,000 credits to match pricing
+const RPC_ENDPOINTS = [
+  "https://api.mainnet-beta.solana.com",
+  "https://solana-api.projectserum.com",
+  "https://rpc.ankr.com/solana",
+  "https://solana-rpc.publicnode.com",
+]
 
 export function PaymentVerificationModal({
   isOpen,
@@ -98,36 +103,69 @@ export function PaymentVerificationModal({
     setErrorMessage("")
 
     try {
-      const connection = new Connection(RPC_ENDPOINT, "confirmed")
-      const adminWalletPubkey = new PublicKey(ADMIN_WALLET)
+      console.log("[v0] Starting transaction verification for:", transactionSignature.trim())
 
-      const transaction = await connection.getParsedTransaction(transactionSignature.trim(), {
-        maxSupportedTransactionVersion: 0,
-      })
+      let connection: Connection | null = null
+      let transaction = null
 
-      if (!transaction) {
-        throw new Error("Transaction not found or could not be fetched.")
+      for (const endpoint of RPC_ENDPOINTS) {
+        try {
+          console.log("[v0] Trying RPC endpoint:", endpoint)
+          connection = new Connection(endpoint, "confirmed")
+
+          transaction = await connection.getParsedTransaction(transactionSignature.trim(), {
+            maxSupportedTransactionVersion: 0,
+          })
+
+          if (transaction) {
+            console.log("[v0] Successfully fetched transaction from:", endpoint)
+            break
+          }
+        } catch (rpcError) {
+          console.log("[v0] RPC endpoint failed:", endpoint, rpcError)
+          continue
+        }
       }
 
+      if (!transaction) {
+        throw new Error("Transaction not found on any RPC endpoint. Please check the signature and try again.")
+      }
+
+      console.log("[v0] Transaction found:", transaction)
+
       if (transaction.meta?.err) {
+        console.log("[v0] Transaction failed on blockchain:", transaction.meta.err)
         throw new Error("Transaction failed on blockchain.")
       }
 
+      const adminWalletPubkey = new PublicKey(ADMIN_WALLET)
       let transferAmount = 0
       let isValidTransfer = false
 
       const instructions = transaction.transaction.message.instructions
+      console.log("[v0] Analyzing", instructions.length, "instructions")
 
       for (const instruction of instructions) {
         if ("parsed" in instruction && instruction.program === "system") {
           const parsed = instruction.parsed
+          console.log("[v0] Found system instruction:", parsed.type)
+
           if (parsed.type === "transfer") {
             const recipientKey = new PublicKey(parsed.info.destination)
             const senderKey = new PublicKey(parsed.info.source)
 
+            console.log("[v0] Transfer details:", {
+              from: senderKey.toBase58(),
+              to: recipientKey.toBase58(),
+              amount: parsed.info.lamports,
+              expectedSender: walletAddress,
+              expectedRecipient: ADMIN_WALLET,
+            })
+
             if (recipientKey.equals(adminWalletPubkey) && senderKey.toBase58() === walletAddress) {
               transferAmount = parsed.info.lamports
               isValidTransfer = true
+              console.log("[v0] Valid transfer found:", transferAmount, "lamports")
               break
             }
           }
@@ -141,14 +179,19 @@ export function PaymentVerificationModal({
       const solAmount = transferAmount / 1000000000 // Convert lamports to SOL
       const credits = Math.floor(solAmount * SOL_TO_CREDITS_RATE)
 
+      console.log("[v0] Calculated:", solAmount, "SOL =", credits, "credits")
+
       if (solAmount < 0.001) {
-        throw new Error("Minimum transfer amount is 0.001 SOL (1 credit)")
+        throw new Error("Minimum transfer amount is 0.001 SOL (1,000 credits)")
       }
 
       const supabase = createClient()
+      console.log("[v0] Getting or creating user for wallet:", walletAddress)
 
       const user = await getOrCreateUser(supabase, walletAddress)
       const newTotalCredits = user.credits + credits
+
+      console.log("[v0] Updating user credits from", user.credits, "to", newTotalCredits)
 
       // Update user credits
       const { error: updateError } = await supabase.from("users").update({ credits: newTotalCredits }).eq("id", user.id)
@@ -158,21 +201,31 @@ export function PaymentVerificationModal({
         throw new Error(`Failed to update credits in database: ${updateError.message}`)
       }
 
-      // Record the payment
-      const { error: paymentError } = await supabase.from("payments").insert({
-        user_id: user.id,
-        transaction_signature: transactionSignature.trim(),
-        amount_sol: solAmount,
-        credits_granted: credits,
-        status: "verified",
-      })
+      const { data: existingPayment } = await supabase
+        .from("payments")
+        .select("id")
+        .eq("transaction_signature", transactionSignature.trim())
+        .single()
 
-      if (paymentError) {
-        console.error("[v0] Failed to record payment:", paymentError)
-        // Don't throw here - credits were already added successfully
+      if (!existingPayment) {
+        // Record the payment
+        const { error: paymentError } = await supabase.from("payments").insert({
+          user_id: user.id,
+          transaction_signature: transactionSignature.trim(),
+          amount_sol: solAmount,
+          credits_granted: credits,
+          status: "verified",
+        })
+
+        if (paymentError) {
+          console.error("[v0] Failed to record payment:", paymentError)
+          // Don't throw here - credits were already added successfully
+        }
+      } else {
+        console.log("[v0] Payment already recorded, skipping duplicate")
       }
 
-      console.log(`[v0] Payment verified: ${solAmount} SOL = ${credits} credits`)
+      console.log(`[v0] Payment verified successfully: ${solAmount} SOL = ${credits} credits`)
       setVerificationStatus("success")
       onPaymentVerified(credits)
 
@@ -228,8 +281,8 @@ export function PaymentVerificationModal({
             </div>
 
             <div className="p-2 bg-blue-100 border border-black rounded">
-              <p className="text-sm font-bold">Rate: 1 SOL = 1,000 Credits</p>
-              <p className="text-xs">Minimum: 0.001 SOL = 1 Credit</p>
+              <p className="text-sm font-bold">Rate: 1 SOL = 1,000,000 Credits</p>
+              <p className="text-xs">Minimum: 0.001 SOL = 1,000 Credits</p>
             </div>
 
             <div className="space-y-2">

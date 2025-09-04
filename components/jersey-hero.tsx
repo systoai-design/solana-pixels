@@ -1,18 +1,18 @@
 export function JerseyHero() {
   return (
     <div className="bg-white border-4 border-black p-8 text-center">
-      <h1 className="jersey-font text-6xl md:text-8xl font-normal text-black mb-4 leading-tight">AURIFY PIXEL</h1>
+      <h1 className="jersey-font text-6xl md:text-8xl font-normal text-black mb-4 leading-tight">SOL PIXEL</h1>
 
       <h2 className="jersey-font text-2xl md:text-4xl text-red-600 mb-6 blink">1M PIXELS FOREVER</h2>
 
       <p className="comic-font text-lg text-black mb-8 max-w-2xl mx-auto">
-        Own your piece of digital history on the Solana blockchain! Buy pixels with AURIFY tokens, upload images with
+        Own your piece of digital history on the Solana blockchain! Buy pixels with SOL tokens, upload images with
         clickable links, add hover messages, and compete in pixel wars. Be part of the eternal advertising canvas.
       </p>
 
       <div className="space-y-4">
         <div className="jersey-font text-xl text-blue-600 rainbow-text">1 CREDIT PER PIXEL</div>
-        <div className="jersey-font text-sm text-gray-600">≈ 10,000 AURIFY PER PIXEL</div>
+        <div className="jersey-font text-sm text-gray-600">≈ 10,000 SOL PER PIXEL</div>
 
         <button className="retro-button jersey-font text-xl px-8 py-4 bg-yellow-300 hover:bg-yellow-400 border-4 border-black">
           START BUYING PIXELS
@@ -26,7 +26,7 @@ export function JerseyHero() {
         </div>
 
         <div className="retro-border bg-blue-200 p-4">
-          <div className="jersey-font text-2xl text-black">10B AURIFY</div>
+          <div className="jersey-font text-2xl text-black">10B SOL</div>
           <div className="comic-font text-sm text-black">TOTAL VALUE</div>
         </div>
 

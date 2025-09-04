@@ -191,61 +191,65 @@ export default function PixelCanvas() {
         hasAltText: !!block.alt_text,
       })
 
-      const { data: existingBlocks, error: fetchError } = await supabase
+      // First, try to find existing block with matching coordinates
+      const { data: existingBlocks, error: findError } = await supabase
         .from("pixel_blocks")
-        .select("*")
+        .select("id")
         .eq("start_x", block.x)
         .eq("start_y", block.y)
         .eq("width", block.width)
         .eq("height", block.height)
 
-      if (fetchError) {
-        console.error("[v0] Failed to fetch existing block:", fetchError)
+      if (findError) {
+        console.error("[v0] Error finding existing block:", findError)
         return false
       }
 
-      console.log("[v0] Found existing blocks:", existingBlocks?.length || 0)
+      let result
+      if (existingBlocks && existingBlocks.length > 0) {
+        // Update existing block
+        const { data, error } = await supabase
+          .from("pixel_blocks")
+          .update({
+            image_url: block.imageUrl || null,
+            link_url: block.url || null,
+            alt_text: block.alt_text || null,
+            wallet_address: block.wallet_address || "unknown",
+          })
+          .eq("id", existingBlocks[0].id)
+          .select()
 
-      if (!existingBlocks || existingBlocks.length === 0) {
-        console.error("[v0] No matching block found in database to update")
+        result = { data, error }
+      } else {
+        // Insert new block
+        const { data, error } = await supabase
+          .from("pixel_blocks")
+          .insert({
+            start_x: block.x,
+            start_y: block.y,
+            width: block.width,
+            height: block.height,
+            wallet_address: block.wallet_address || "unknown",
+            image_url: block.imageUrl || null,
+            link_url: block.url || null,
+            alt_text: block.alt_text || null,
+            total_price: 1, // Default price for uploaded content
+          })
+          .select()
+
+        result = { data, error }
+      }
+
+      if (result.error) {
+        console.error("[v0] Failed to save block:", result.error)
         return false
       }
 
-      const { error: updateError } = await supabase
-        .from("pixel_blocks")
-        .update({
-          image_url: block.imageUrl || null,
-          link_url: block.url || null,
-          alt_text: block.alt_text || null,
-        })
-        .eq("start_x", block.x)
-        .eq("start_y", block.y)
-        .eq("width", block.width)
-        .eq("height", block.height)
-
-      if (updateError) {
-        console.error("[v0] Failed to update block in database:", updateError)
-        return false
-      }
-
-      const { data: updatedBlocks, error: verifyError } = await supabase
-        .from("pixel_blocks")
-        .select("image_url, link_url, alt_text")
-        .eq("start_x", block.x)
-        .eq("start_y", block.y)
-        .eq("width", block.width)
-        .eq("height", block.height)
-
-      if (verifyError) {
-        console.error("[v0] Failed to verify update:", verifyError)
-        return false
-      }
-
-      console.log("[v0] Updated block verification:", updatedBlocks?.[0])
-      console.log("[v0] Successfully updated block in database - changes will be visible to all users")
+      console.log("[v0] Successfully saved block:", result.data?.[0])
+      console.log("[v0] Upload details saved - visible to all users server-wide")
       return true
     } catch (error) {
-      console.error("[v0] Database update error:", error)
+      console.error("[v0] Database save error:", error)
       return false
     }
   }

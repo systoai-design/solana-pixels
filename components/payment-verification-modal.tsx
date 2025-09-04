@@ -238,12 +238,12 @@ export function PaymentVerificationModal({
         <Card className="w-full max-w-md bg-white border-2 border-black">
           <CardHeader className="text-center">
             <CardTitle className="text-xl font-bold">💰 VERIFY PAYMENT</CardTitle>
-            <CardDescription>Send AURIFY tokens to admin wallet, then verify your transaction</CardDescription>
+            <CardDescription>Send SOL tokens to admin wallet, then verify your transaction</CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label className="font-bold">1. Send AURIFY Tokens to Admin Wallet:</Label>
+              <Label className="font-bold">1. Send SOL Tokens to Admin Wallet:</Label>
               <div className="flex items-center gap-2 p-2 bg-yellow-100 border border-black rounded">
                 <code className="text-xs flex-1 break-all">{ADMIN_WALLET}</code>
                 <Button
@@ -258,8 +258,8 @@ export function PaymentVerificationModal({
             </div>
 
             <div className="p-2 bg-blue-100 border border-black rounded">
-              <p className="text-sm font-bold">Rate: 1M AURIFY = 100 Credits</p>
-              <p className="text-xs">Minimum: 10,000 AURIFY = 0.001 Credits</p>
+              <p className="text-sm font-bold">Rate: 1M SOL = 100 Credits</p>
+              <p className="text-xs">Minimum: 10,000 SOL = 0.001 Credits</p>
               <p className="text-xs text-gray-600">Token: {AURIFY_TOKEN_ADDRESS}</p>
             </div>
 
@@ -307,7 +307,7 @@ export function PaymentVerificationModal({
             </div>
 
             <div className="text-xs text-gray-600 space-y-1">
-              <p>• Send AURIFY tokens from any wallet app to the admin address above</p>
+              <p>• Send SOL tokens from any wallet app to the admin address above</p>
               <p>• Copy the transaction signature from your wallet</p>
               <p>• Paste it here to verify and receive credits instantly</p>
             </div>

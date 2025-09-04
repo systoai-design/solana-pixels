@@ -137,6 +137,34 @@
   background: #f0f0f0 !important;
 }
 
+/* Fix wallet adapter dropdown and menu text contrast */
+.wallet-adapter-dropdown,
+.wallet-adapter-dropdown-list,
+.wallet-adapter-dropdown-list-item,
+.wallet-adapter-modal-list-item,
+.wallet-adapter-modal-list-item span,
+.wallet-adapter-modal-list-item div,
+.wallet-adapter-button-trigger .wallet-adapter-button span,
+.wallet-adapter-button-trigger .wallet-adapter-button div {
+  color: #000000 !important;
+  background: #f0f0f0 !important;
+}
+
+/* Ensure wallet adapter text elements have proper contrast */
+.wallet-adapter-modal *,
+.wallet-adapter-dropdown *,
+.wallet-adapter-button * {
+  color: #000000 !important;
+}
+
+/* Override any remaining white text on white background issues */
+.wallet-adapter-modal li,
+.wallet-adapter-dropdown li,
+.wallet-adapter-button li {
+  color: #000000 !important;
+  background: #f0f0f0 !important;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
@@ -222,10 +250,14 @@
     font-family: "Comic Sans MS", cursive;
     font-weight: bold;
     cursor: pointer;
+    /* Added explicit text color for better contrast */
+    color: #000000;
   }
 
   .retro-button:hover {
     background: #e0e0e0;
+    /* Maintain text color on hover */
+    color: #000000;
   }
 
   .retro-button:active {

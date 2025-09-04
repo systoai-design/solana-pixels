@@ -3,16 +3,31 @@ import { createServerClient } from "@supabase/ssr"
 
 export async function POST(req: Request) {
   try {
-    const { selectedArea, publicKey, isWar, userCredits, creditsNeeded } = await req.json()
+    const body = await req.json()
+    const { selectedArea, publicKey, isWar, creditsNeeded } = body
+
+    // Input validation
+    if (!selectedArea || typeof selectedArea !== 'object' || !selectedArea.x || !selectedArea.y || !selectedArea.width || !selectedArea.height) {
+      return NextResponse.json({ error: "Invalid selected area provided." }, { status: 400 })
+    }
+    if (!publicKey || typeof publicKey !== 'string') {
+      return NextResponse.json({ error: "Invalid public key provided." }, { status: 400 })
+    }
+    if (typeof creditsNeeded !== 'number' || creditsNeeded <= 0) {
+      return NextResponse.json({ error: "Invalid credits needed." }, { status: 400 })
+    }
 
     console.log(
-      `[v0] Processing purchase: ${creditsNeeded} credits for ${selectedArea.width}x${selectedArea.height} area`,
+      `[v0] Processing purchase: ${creditsNeeded} credits for ${selectedArea.width}x${selectedArea.height} area at (${selectedArea.x}, ${selectedArea.y}) by ${publicKey}`,
     )
 
-    const supabaseUrl = "https://tomdwpozafthjxgbvoau.supabase.co"
-    // You need to replace this with your actual SERVICE ROLE KEY from Supabase dashboard
-    const supabaseServiceKey =
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU" // Replace with actual service role key
+    const supabaseUrl = process.env.SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("[v0] Missing Supabase environment variables")
+      return NextResponse.json({ error: "Server configuration error." }, { status: 500 })
+    }
 
     const supabase = createServerClient(supabaseUrl, supabaseServiceKey, {
       cookies: {
@@ -31,7 +46,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to get user information." }, { status: 500 })
     }
 
-    // Fetch and check current credits (This is now done securely on the server)
+    // Fetch current credits
     const { data: currentWallet, error: fetchError } = await supabase
       .from("wallet_credits")
       .select("credits")
@@ -48,51 +63,34 @@ export async function POST(req: Request) {
     if (currentCredits < creditsNeeded) {
       return NextResponse.json(
         {
-          error: `Insufficient credits. Need ${creditsNeeded}, have ${currentCredits}`,
+          error: `Insufficient credits. Required: ${creditsNeeded}, Available: ${currentCredits}`,
         },
         { status: 400 },
       )
     }
 
-    const newCreditsBalance = currentCredits - creditsNeeded
+    // Generate transaction signature
+    const prefix = isWar ? "war" : "credit"
+    const transactionSignature = `${prefix}_purchase_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
 
-    // Update credits
-    const { error: updateError } = await supabase.from("wallet_credits").upsert({
-      wallet_address: publicKey,
-      credits: newCreditsBalance,
-      updated_at: new Date().toISOString(),
+    // Perform atomic transaction for deduction and insertion
+    const { data, error: txError } = await supabase.rpc('atomic_purchase', {
+      p_wallet_address: publicKey,
+      p_credits_needed: creditsNeeded,
+      p_start_x: selectedArea.x,
+      p_start_y: selectedArea.y,
+      p_width: selectedArea.width,
+      p_height: selectedArea.height,
+      p_transaction_signature: transactionSignature,
+      p_user_id: userId,
     })
 
-    if (updateError) {
-      console.error("[v0] Server-side credit deduction error:", updateError)
-      return NextResponse.json({ error: "Failed to deduct credits." }, { status: 500 })
+    if (txError) {
+      console.error("[v0] Atomic transaction error:", txError)
+      return NextResponse.json({ error: "Failed to process purchase." }, { status: 500 })
     }
 
-    const transactionSignature = `${isWar ? "war" : "credit"}_purchase_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
-    const { error: blockError } = await supabase.from("pixel_blocks").insert({
-      start_x: selectedArea.x,
-      start_y: selectedArea.y,
-      width: selectedArea.width,
-      height: selectedArea.height,
-      owner_id: userId,
-      wallet_address: publicKey,
-      transaction_signature: transactionSignature,
-      total_price: creditsNeeded,
-      image_url: null, // Will be updated when user uploads image
-      link_url: null, // Will be updated when user adds website link
-      alt_text: null, // Will be updated when user adds hover message
-      created_at: new Date().toISOString(),
-    })
-
-    if (blockError) {
-      console.error("[v0] Server-side block save error:", blockError)
-      await supabase.from("wallet_credits").upsert({
-        wallet_address: publicKey,
-        credits: currentCredits,
-        updated_at: new Date().toISOString(),
-      })
-      return NextResponse.json({ error: "Failed to save purchase to database." }, { status: 500 })
-    }
+    const newCreditsBalance = data?.new_balance || currentCredits - creditsNeeded
 
     console.log(`[v0] Purchase completed successfully. New balance: ${newCreditsBalance}`)
     return NextResponse.json({ success: true, newCreditsBalance, transactionSignature })

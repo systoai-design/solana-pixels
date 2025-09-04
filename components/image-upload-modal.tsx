@@ -80,26 +80,40 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
   }, [])
 
   const resizeImage = useCallback(
-    (imageUrl: string): Promise<string> => {
-      return new Promise((resolve) => {
+    (imageUrl: string): Promise<Blob> => {
+      return new Promise((resolve, reject) => {
         const img = new Image()
         img.onload = () => {
           const canvas = canvasRef.current
-          if (!canvas) return
+          if (!canvas) {
+            reject(new Error("No canvas available"))
+            return
+          }
 
           canvas.width = block.width
           canvas.height = block.height
 
           const ctx = canvas.getContext("2d")
-          if (!ctx) return
+          if (!ctx) {
+            reject(new Error("No canvas context"))
+            return
+          }
 
-          // Draw image to fit the block dimensions
           ctx.drawImage(img, 0, 0, block.width, block.height)
 
-          // Convert to data URL
-          const resizedDataUrl = canvas.toDataURL("image/png")
-          resolve(resizedDataUrl)
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob)
+              } else {
+                reject(new Error("Failed to create blob"))
+              }
+            },
+            "image/png",
+            1.0,
+          )
         }
+        img.onerror = reject
         img.src = imageUrl
       })
     },
@@ -116,12 +130,18 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
       let finalImageUrl = block.imageUrl // Use existing image by default
 
       if (selectedFile && previewUrl) {
-        // Resize image to fit block dimensions
-        finalImageUrl = await resizeImage(previewUrl)
+        const resizedBlob = await resizeImage(previewUrl)
+
+        // Convert blob to base64 data URL
+        const reader = new FileReader()
+        finalImageUrl = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(resizedBlob)
+        })
       }
 
-      // In a real implementation, you would upload to IPFS/Arweave here
-      // For now, we'll use the resized data URL or existing image
+      // Call the callback with the (new or existing) image URL and other details
       onImageUpload(blockIndex, finalImageUrl!, url.trim() || undefined, message.trim() || undefined)
 
       console.log("[v0] Upload details saved:", {
@@ -137,7 +157,7 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
       setUrl("")
       setMessage("")
     } catch (error) {
-      setUploadError("Failed to process image")
+      setUploadError(error instanceof Error ? error.message : "Failed to process image")
       console.error("[v0] Image upload error:", error)
     } finally {
       setIsUploading(false)

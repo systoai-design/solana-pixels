@@ -34,7 +34,7 @@ const ADMIN_WALLETS = [
 ]
 
 export default function PixelCanvas() {
-  const { connected, publicKey } = useWallet()
+  const { connected, publicKey, signMessage } = useWallet()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [selectedArea, setSelectedArea] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -181,7 +181,7 @@ export default function PixelCanvas() {
     try {
       const supabase = createBrowserClient(
         "https://tomdwpozafthjxgbvoau.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU", // Service role key needed for bypassing RLS policies
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
       )
 
       console.log("[v0] Updating block in database:", {
@@ -524,7 +524,6 @@ export default function PixelCanvas() {
       owner: updatedBlock.owner,
     })
 
-    // Update local state immediately
     setPixelBlocks((prev) => {
       const updated = [...prev]
       const globalIndex = prev.findIndex(
@@ -533,51 +532,56 @@ export default function PixelCanvas() {
 
       if (globalIndex !== -1) {
         updated[globalIndex] = updatedBlock
-        console.log("[v0] Updated local state at global index:", globalIndex)
+        console.log("[v0] Updated local state for block at global index:", globalIndex)
       } else {
-        console.warn("[v0] Could not find block in global state for local update")
+        console.error("[v0] Could not find block in global pixelBlocks array")
       }
       return updated
     })
 
-    // Temporarily pause sync to prevent override during upload
     setIsSyncPaused(true)
-    console.log("[v0] Paused sync during upload")
 
-    console.log("[v0] Calling updatePixelBlockInDatabase...")
-    const updateSuccess = await updatePixelBlockInDatabase(updatedBlock)
+    try {
+      if (!signMessage || !publicKey) {
+        throw new Error("Wallet not connected or signMessage not available")
+      }
 
-    if (updateSuccess) {
-      console.log("[v0] ✅ Database update successful - image uploaded successfully for block:", updatedBlock)
-      // Force a fresh load from database to confirm persistence
-      setTimeout(() => {
-        console.log("[v0] Reloading blocks from database to confirm persistence")
-        loadPixelBlocksFromDatabase()
-        setIsSyncPaused(false)
-      }, 2000)
-    } else {
-      console.error("[v0] ❌ Failed to update block in database")
-      // Revert local changes if database update failed
-      setPixelBlocks((prev) => {
-        const reverted = [...prev]
-        const globalIndex = prev.findIndex(
-          (block) => block.x === blockToUpdate.x && block.y === blockToUpdate.y && block.owner === blockToUpdate.owner,
-        )
+      const messageToSign = `Update block at ${updatedBlock.x},${updatedBlock.y} with image ${updatedBlock.imageUrl}`
+      const encodedMessage = new TextEncoder().encode(messageToSign)
+      const signedMessage = await signMessage(encodedMessage)
+      const signature = Buffer.from(signedMessage).toString("base64")
 
-        if (globalIndex !== -1) {
-          reverted[globalIndex] = blockToUpdate
-          console.log("[v0] Reverted local changes due to database failure")
-        }
-        return reverted
+      const response = await fetch("/api/update-block", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publicKey: publicKey.toString(),
+          updatedBlock,
+          signature,
+          messageToSign,
+        }),
       })
+
+      if (!response.ok) {
+        throw new Error(`Update failed: ${response.statusText}`)
+      }
+
+      console.log("[v0] Successfully updated block via API")
+
+      setTimeout(() => {
+        setIsSyncPaused(false)
+        syncPixelBlocks()
+      }, 1000)
+    } catch (error) {
+      console.error("[v0] Failed to update block:", error)
       setIsSyncPaused(false)
+    } finally {
+      setIsUploadingImage(false)
+      setUploadModalOpen(false)
+      setSelectedBlockForUpload(null)
     }
 
-    setTimeout(() => {
-      setIsUploadingImage(false)
-    }, 3000)
-
-    setSelectedBlockForUpload(null)
+    console.log("[v0] Image upload process completed")
   }
 
   const handleRetractPixels = async (area: { x: number; y: number; width: number; height: number }) => {
@@ -998,7 +1002,7 @@ export default function PixelCanvas() {
       value: isAdmin ? "0.1" : "1",
       color: isAdmin ? "text-blue-600" : "text-green-600",
     },
-    { label: "PIXELS LEFT", value: (1000000 - totalPixelsSold).toLocaleString(), color: "text-blue-600" },
+    { label: "PIXELS LEFT", value: (1000000 - totalPixelsSold).toLocaleString(), color: "text-black" },
   ]
 
   const loadUserCredits = async (walletAddress: string) => {
@@ -1117,7 +1121,7 @@ export default function PixelCanvas() {
         <h1 className="text-6xl font-bold text-black mb-4 jersey-font">
           🎨 <RainbowText>SOL PIXEL</RainbowText> 🎨
         </h1>
-        <div className="bg-yellow-300 border-4 border-black p-4 inline-block">
+        <div className="bg-yellow-200 border-4 border-black p-4 inline-block">
           <p className="text-black font-bold text-xl comic-font">
             ⚡ <BlinkingText>DIGITAL ADVERTISING CANVAS</BlinkingText> ON SOLANA BLOCKCHAIN! ⚡
           </p>
@@ -1299,7 +1303,7 @@ export default function PixelCanvas() {
                       <div className="flex gap-1 mt-1">
                         <Button
                           size="sm"
-                          className="retro-button text-xs flex-1"
+                          className="retro-button text-xs flex-1 text-black font-bold"
                           onClick={() => openUploadModal(block, i)}
                         >
                           {block.imageUrl ? "CHANGE DETAILS" : "UPLOAD DETAILS"}

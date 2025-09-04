@@ -12,7 +12,7 @@ import { ImageUploadModal } from "@/components/image-upload-modal"
 import { CreditsDisplay } from "@/components/credits-display"
 import { PaymentVerificationModal } from "@/components/payment-verification-modal"
 import { VisitorCounter, ScrollingMarquee, BlinkingText, RainbowText, RetroStats } from "@/components/retro-elements"
-import { createClient } from "@/lib/supabase/client"
+import { createBrowserClient } from "@/lib/supabase/client"
 import { UsernameModal } from "@/components/username-modal"
 
 interface PixelBlock {
@@ -91,7 +91,10 @@ export default function PixelCanvas() {
 
   const getOrCreateUser = async (walletAddress: string): Promise<string | null> => {
     try {
-      const supabase = createClient()
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
 
       // Simply return the wallet address as the identifier - no complex user creation needed
       const { data: existingCredits, error: findError } = await supabase
@@ -124,7 +127,10 @@ export default function PixelCanvas() {
 
   const savePixelBlockToDatabase = async (block: PixelBlock) => {
     try {
-      const supabase = createClient()
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
 
       if (!block.owner || block.owner === "anonymous") {
         console.error("[v0] No owner specified for pixel block")
@@ -147,7 +153,7 @@ export default function PixelCanvas() {
         start_y: block.y,
         width: block.width,
         height: block.height,
-        owner_id: ownerId,
+        wallet_address: block.owner, // Use wallet_address field instead of owner_id
         image_url: block.imageUrl || null,
         link_url: block.url || null,
         total_price: block.width * block.height * pricePerPixel,
@@ -172,7 +178,10 @@ export default function PixelCanvas() {
 
   const updatePixelBlockInDatabase = async (block: PixelBlock) => {
     try {
-      const supabase = createClient()
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
 
       const { error: updateError } = await supabase
         .from("pixel_blocks")
@@ -201,7 +210,10 @@ export default function PixelCanvas() {
 
   const deletePixelBlockFromDatabase = async (block: PixelBlock) => {
     try {
-      const supabase = createClient()
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
 
       const { error: deleteError } = await supabase
         .from("pixel_blocks")
@@ -226,12 +238,15 @@ export default function PixelCanvas() {
 
   const loadPixelBlocksFromDatabase = async (): Promise<PixelBlock[]> => {
     try {
-      const supabase = createClient()
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
 
-      const { data, error } = await supabase.from("pixel_blocks").select("*").order("created_at", { ascending: true })
+      const { data, error } = await supabase.from("pixel_blocks").select("*")
 
       if (error) {
-        console.error("[v0] Failed to load blocks from database:", error)
+        console.error("[v0] Database load error:", error)
         return []
       }
 
@@ -241,7 +256,7 @@ export default function PixelCanvas() {
         y: block.start_y,
         width: block.width,
         height: block.height,
-        owner: block.wallet_address || block.owner_id || undefined, // Use wallet_address first, fallback to owner_id
+        owner: block.wallet_address || undefined, // Use wallet_address for ownership display
         imageUrl: block.image_url || undefined,
         url: block.link_url || undefined,
         color: block.image_url ? undefined : "#" + Math.floor(Math.random() * 16777215).toString(16),
@@ -459,7 +474,10 @@ export default function PixelCanvas() {
 
       if (allDeleted && totalPixelsToRefund > 0) {
         try {
-          const supabase = createClient()
+          const supabase = createBrowserClient(
+            "https://tomdwpozafthjxgbvoau.supabase.co",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+          )
 
           const { data: currentWallet, error: fetchError } = await supabase
             .from("wallet_credits")
@@ -534,7 +552,10 @@ export default function PixelCanvas() {
 
       if (deleteSuccess) {
         try {
-          const supabase = createClient()
+          const supabase = createBrowserClient(
+            "https://tomdwpozafthjxgbvoau.supabase.co",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+          )
 
           const { data: currentWallet, error: fetchError } = await supabase
             .from("wallet_credits")
@@ -860,7 +881,10 @@ export default function PixelCanvas() {
 
   const loadUserCredits = async (walletAddress: string) => {
     try {
-      const supabase = createClient()
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
 
       const { data, error } = await supabase
         .from("wallet_credits")
@@ -882,7 +906,10 @@ export default function PixelCanvas() {
 
   const loadUserUsername = async (walletAddress: string) => {
     try {
-      const supabase = createClient()
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
 
       const { data, error } = await supabase
         .from("wallet_credits")
@@ -902,7 +929,10 @@ export default function PixelCanvas() {
 
   const loadBlockOwnerUsername = async (ownerWallet: string) => {
     try {
-      const supabase = createClient()
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
 
       const { data, error } = await supabase
         .from("wallet_credits")

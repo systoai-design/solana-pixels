@@ -5,7 +5,6 @@ import { useWallet } from "@solana/wallet-adapter-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 
 interface PurchaseButtonProps {
   selectedArea: { x: number; y: number; width: number; height: number } | null
@@ -109,53 +108,31 @@ export function PurchaseButton({
         return
       }
 
-      const supabase = createClient()
-      const newCreditsBalance = userCredits - creditsNeeded
-
-      // Update credits in database
-      const { error: updateError } = await supabase.from("wallet_credits").upsert({
-        wallet_address: publicKey.toString(),
-        credits: newCreditsBalance,
-        updated_at: new Date().toISOString(),
+      const response = await fetch("/api/purchase", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          selectedArea,
+          publicKey: publicKey.toString(),
+          isWar,
+          userCredits,
+          creditsNeeded,
+        }),
       })
 
-      if (updateError) {
-        console.error("[v0] Failed to deduct credits:", updateError)
-        setPurchaseError("Failed to deduct credits from account")
+      const data = await response.json()
+
+      if (!response.ok) {
+        setPurchaseError(data.error || "Purchase failed.")
         return
       }
 
-      console.log(`[v0] Successfully deducted ${creditsNeeded} credits. New balance: ${newCreditsBalance}`)
+      const newCreditsBalance = data.newCreditsBalance
+      const transactionSignature = data.transactionSignature
 
-      const transactionSignature = `${isWar ? "war" : "credit"}_purchase_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
-
-      // Save pixel block to database
-      const { error: blockError } = await supabase.from("pixel_blocks").insert({
-        start_x: selectedArea.x,
-        start_y: selectedArea.y,
-        width: selectedArea.width,
-        height: selectedArea.height,
-        wallet_address: publicKey.toString(),
-        transaction_signature: transactionSignature,
-        created_at: new Date().toISOString(),
-      })
-
-      if (blockError) {
-        console.error("[v0] Database save error:", blockError)
-        console.log("[v0] Failed to save purchase to database - not updating local state")
-
-        // Revert credits since block save failed
-        await supabase.from("wallet_credits").upsert({
-          wallet_address: publicKey.toString(),
-          credits: userCredits, // Revert to original credits
-          updated_at: new Date().toISOString(),
-        })
-
-        setPurchaseError("Failed to save purchase to database")
-        return
-      }
-
-      console.log("[v0] Processing purchase success for:", publicKey.toString(), "at", selectedArea.x, selectedArea.y)
+      console.log(`[v0] Purchase successful! New balance: ${newCreditsBalance}`)
 
       // Update local credits state
       onCreditsUpdate(newCreditsBalance)
@@ -166,6 +143,7 @@ export function PurchaseButton({
         width: selectedArea.width,
         height: selectedArea.height,
         owner: publicKey.toString(),
+        color: "#ff0000", // Default color
         transaction_signature: transactionSignature,
       }
 
@@ -173,7 +151,7 @@ export function PurchaseButton({
       onPurchaseSuccess(newBlock)
     } catch (error) {
       console.error("[v0] Purchase failed:", error)
-      setPurchaseError(error instanceof Error ? error.message : "Purchase failed")
+      setPurchaseError("Purchase failed due to a network error.")
     } finally {
       setIsPurchasing(false)
     }

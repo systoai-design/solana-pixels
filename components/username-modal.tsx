@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { createClient } from "@/lib/supabase/client"
+import { createClient } from "@supabase/supabase-js"
 
 interface UsernameModalProps {
   isOpen: boolean
@@ -40,7 +40,11 @@ export function UsernameModal({
     setError("")
 
     try {
-      const supabase = createClient()
+      const supabase = createClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
+
       const { error: updateError } = await supabase
         .from("wallet_credits")
         .upsert({
@@ -54,6 +58,7 @@ export function UsernameModal({
         setError("Failed to update username")
         console.error("[v0] Failed to update username:", updateError)
       } else {
+        console.log("[v0] Username saved successfully:", username.trim())
         onUsernameUpdate(username.trim())
         onClose()
       }

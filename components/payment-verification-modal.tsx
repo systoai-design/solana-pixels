@@ -45,20 +45,56 @@ export function PaymentVerificationModal({
       return
     }
 
+    const trimmedSignature = transactionSignature.trim()
+    if (trimmedSignature.length < 80 || trimmedSignature.length > 90) {
+      setErrorMessage("Invalid transaction signature format. Please check and try again.")
+      setVerificationStatus("error")
+      return
+    }
+
     setIsVerifying(true)
     setVerificationStatus("idle")
     setErrorMessage("")
 
     try {
+      const supabase = createClient({
+        supabaseUrl: "https://tomdwpozafthjxgbvoau.supabase.co",
+        supabaseKey:
+          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      })
+
+      console.log(`[v0] Checking for duplicate transaction: ${trimmedSignature}`)
+      const { data: existingPayment, error: paymentCheckError } = await supabase
+        .from("payments")
+        .select("id, credits_granted")
+        .eq("transaction_signature", trimmedSignature)
+        .maybeSingle()
+
+      if (paymentCheckError) {
+        console.error("[v0] Error checking existing payment:", paymentCheckError)
+        throw new Error("Database error while checking payment history")
+      }
+
+      if (existingPayment) {
+        console.log(`[v0] Duplicate transaction detected: ${trimmedSignature}`)
+        throw new Error("This transaction has already been processed and credits have been granted")
+      }
+
       const connection = new Connection(RPC_ENDPOINT, "confirmed")
       const adminWalletPubkey = new PublicKey(ADMIN_WALLET)
       const aurifyTokenMint = new PublicKey(AURIFY_TOKEN_ADDRESS)
 
-      console.log(`[v0] Verifying AURIFY token transaction: ${transactionSignature.trim()}`)
+      console.log(`[v0] Verifying AURIFY token transaction: ${trimmedSignature}`)
 
-      const transaction = await connection.getParsedTransaction(transactionSignature.trim(), {
-        maxSupportedTransactionVersion: 0,
-      })
+      let transaction
+      try {
+        transaction = await connection.getParsedTransaction(trimmedSignature, {
+          maxSupportedTransactionVersion: 0,
+        })
+      } catch (fetchError) {
+        console.error("[v0] Transaction fetch error:", fetchError)
+        throw new Error("Invalid transaction signature or transaction not found")
+      }
 
       if (!transaction) {
         throw new Error("Transaction not found or could not be fetched.")
@@ -123,21 +159,20 @@ export function PaymentVerificationModal({
         throw new Error("Minimum transfer amount is 10,000 AURIFY tokens")
       }
 
-      const supabase = createClient()
-
-      const { data: existingPayment, error: paymentCheckError } = await supabase
+      const { data: duplicateCheck, error: duplicateError } = await supabase
         .from("payments")
         .select("id")
-        .eq("transaction_signature", transactionSignature.trim())
+        .eq("transaction_signature", trimmedSignature)
         .maybeSingle()
 
-      if (paymentCheckError) {
-        console.error("[v0] Error checking existing payment:", paymentCheckError)
-        throw new Error("Database error while checking payment history")
+      if (duplicateError) {
+        console.error("[v0] Error in duplicate check:", duplicateError)
+        throw new Error("Database error during final duplicate check")
       }
 
-      if (existingPayment) {
-        throw new Error("This transaction has already been processed")
+      if (duplicateCheck) {
+        console.log(`[v0] Duplicate transaction caught in final check: ${trimmedSignature}`)
+        throw new Error("This transaction was processed by another request")
       }
 
       const { data: walletCredits, error: creditsError } = await supabase
@@ -156,6 +191,19 @@ export function PaymentVerificationModal({
 
       console.log(`[v0] Updating credits: ${currentCredits} + ${credits} = ${newTotalCredits}`)
 
+      const { error: paymentError } = await supabase.from("payments").insert({
+        wallet_address: walletAddress,
+        transaction_signature: trimmedSignature,
+        amount_sol: tokenAmount / 1000000, // Convert large token amount to smaller decimal value
+        credits_granted: credits,
+        status: "verified",
+      })
+
+      if (paymentError) {
+        console.error("[v0] Failed to record payment:", paymentError)
+        throw new Error("Failed to record payment. Please contact support.")
+      }
+
       const { error: upsertError } = await supabase.from("wallet_credits").upsert({
         wallet_address: walletAddress,
         credits: newTotalCredits,
@@ -166,19 +214,6 @@ export function PaymentVerificationModal({
       if (upsertError) {
         console.error("[v0] Failed to update wallet credits:", upsertError)
         throw new Error("Failed to update credits. Please contact support.")
-      }
-
-      const { error: paymentError } = await supabase.from("payments").insert({
-        wallet_address: walletAddress,
-        transaction_signature: transactionSignature.trim(),
-        amount_sol: tokenAmount, // Reusing this field for token amount
-        credits_granted: credits,
-        status: "verified",
-      })
-
-      if (paymentError) {
-        console.error("[v0] Failed to record payment:", paymentError)
-        // Don't throw error here as credits were already updated
       }
 
       console.log(`[v0] Payment verification successful: ${tokenAmount} AURIFY tokens = ${credits} credits`)

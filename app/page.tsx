@@ -226,11 +226,6 @@ export default function PixelCanvas() {
 
   const loadPixelBlocksFromDatabase = async (): Promise<PixelBlock[]> => {
     try {
-      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        console.log("[v0] Supabase environment variables not configured, using empty blocks array")
-        return []
-      }
-
       const supabase = createClient()
 
       const { data, error } = await supabase.from("pixel_blocks").select("*").order("created_at", { ascending: true })
@@ -246,7 +241,7 @@ export default function PixelCanvas() {
         y: block.start_y,
         width: block.width,
         height: block.height,
-        owner: block.owner_id || undefined, // Use owner_id directly as wallet address
+        owner: block.wallet_address || block.owner_id || undefined, // Use wallet_address first, fallback to owner_id
         imageUrl: block.image_url || undefined,
         url: block.link_url || undefined,
         color: block.image_url ? undefined : "#" + Math.floor(Math.random() * 16777215).toString(16),
@@ -865,31 +860,13 @@ export default function PixelCanvas() {
 
   const loadUserCredits = async (walletAddress: string) => {
     try {
-      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        console.log("[v0] Supabase environment variables not configured, returning 0 credits")
-        return 0
-      }
-
       const supabase = createClient()
 
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from("wallet_credits")
         .select("credits")
         .eq("wallet_address", walletAddress)
         .maybeSingle()
-
-      // If wallet_credits table doesn't exist, try the old users table
-      if (error && error.message.includes("wallet_credits")) {
-        console.log("[v0] wallet_credits table not found, trying users table")
-        const { data: userData, error: userError } = await supabase
-          .from("users")
-          .select("credits")
-          .eq("wallet_address", walletAddress)
-          .maybeSingle()
-
-        data = userData
-        error = userError
-      }
 
       if (error) {
         console.error("[v0] Failed to load user credits:", error)
@@ -907,23 +884,11 @@ export default function PixelCanvas() {
     try {
       const supabase = createClient()
 
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from("wallet_credits")
         .select("username")
         .eq("wallet_address", walletAddress)
         .maybeSingle()
-
-      // If wallet_credits table doesn't exist, try the old users table
-      if (error && error.message.includes("wallet_credits")) {
-        const { data: userData, error: userError } = await supabase
-          .from("users")
-          .select("username")
-          .eq("wallet_address", walletAddress)
-          .maybeSingle()
-
-        data = userData
-        error = userError
-      }
 
       if (error) {
         return walletAddress.slice(0, 8) + "..."
@@ -939,23 +904,11 @@ export default function PixelCanvas() {
     try {
       const supabase = createClient()
 
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from("wallet_credits")
         .select("username")
         .eq("wallet_address", ownerWallet)
         .maybeSingle()
-
-      // If wallet_credits table doesn't exist, try the old users table
-      if (error && error.message.includes("wallet_credits")) {
-        const { data: userData, error: userError } = await supabase
-          .from("users")
-          .select("username")
-          .eq("wallet_address", ownerWallet)
-          .maybeSingle()
-
-        data = userData
-        error = userError
-      }
 
       if (error) {
         return ownerWallet.slice(0, 8) + "..."
@@ -967,8 +920,24 @@ export default function PixelCanvas() {
     }
   }
 
-  const creditsToSol = (credits: number) => {
-    return (credits / 1000000).toFixed(6)
+  const creditsToAurify = (credits: number) => {
+    return (credits * 10000).toLocaleString() // 1 credit = 10,000 AURIFY tokens
+  }
+
+  const handlePaymentVerified = async (newCredits: number) => {
+    try {
+      // Always add to existing credits, never replace
+      const currentCredits = await loadUserCredits(publicKey?.toString() || "")
+      const totalCredits = currentCredits + newCredits
+      setUserCredits(totalCredits)
+
+      console.log(`[v0] Payment verified: Added ${newCredits} credits. Total: ${totalCredits}`)
+    } catch (error) {
+      console.error("[v0] Error updating credits after payment:", error)
+      // Fallback to adding to current displayed credits if database fails
+      setUserCredits((prev) => prev + newCredits)
+    }
+    setPaymentModalOpen(false)
   }
 
   return (
@@ -1105,13 +1074,13 @@ export default function PixelCanvas() {
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">ADMIN: 0.1 CREDITS/PIXEL!</p>
-                  <p className="text-base text-black">≈ {creditsToSol(0.1)} SOL/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToAurify(0.1)} AURIFY/PIXEL</p>
                 </div>
               )}
               {!isAdmin && (
                 <div className="bg-blue-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">1 CREDIT/PIXEL</p>
-                  <p className="text-base text-black">≈ {creditsToSol(1)} SOL/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToAurify(1)} AURIFY/PIXEL</p>
                 </div>
               )}
               {connected ? (
@@ -1238,10 +1207,7 @@ export default function PixelCanvas() {
           isOpen={paymentModalOpen}
           onClose={() => setPaymentModalOpen(false)}
           walletAddress={publicKey.toString()}
-          onPaymentVerified={(newCredits) => {
-            setUserCredits(newCredits)
-            setPaymentModalOpen(false)
-          }}
+          onPaymentVerified={handlePaymentVerified}
         />
       )}
 

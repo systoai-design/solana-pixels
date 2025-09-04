@@ -109,14 +109,15 @@ export function PurchaseButton({
         return
       }
 
-      // Deduct credits from user's balance
       const supabase = createClient()
       const newCreditsBalance = userCredits - creditsNeeded
 
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({ credits: newCreditsBalance })
-        .eq("wallet_address", publicKey.toString())
+      // Update credits in database
+      const { error: updateError } = await supabase.from("wallet_credits").upsert({
+        wallet_address: publicKey.toString(),
+        credits: newCreditsBalance,
+        updated_at: new Date().toISOString(),
+      })
 
       if (updateError) {
         console.error("[v0] Failed to deduct credits:", updateError)
@@ -126,11 +127,38 @@ export function PurchaseButton({
 
       console.log(`[v0] Successfully deducted ${creditsNeeded} credits. New balance: ${newCreditsBalance}`)
 
+      const transactionSignature = `${isWar ? "war" : "credit"}_purchase_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
+
+      // Save pixel block to database
+      const { error: blockError } = await supabase.from("pixel_blocks").insert({
+        start_x: selectedArea.x,
+        start_y: selectedArea.y,
+        width: selectedArea.width,
+        height: selectedArea.height,
+        wallet_address: publicKey.toString(),
+        transaction_signature: transactionSignature,
+        created_at: new Date().toISOString(),
+      })
+
+      if (blockError) {
+        console.error("[v0] Database save error:", blockError)
+        console.log("[v0] Failed to save purchase to database - not updating local state")
+
+        // Revert credits since block save failed
+        await supabase.from("wallet_credits").upsert({
+          wallet_address: publicKey.toString(),
+          credits: userCredits, // Revert to original credits
+          updated_at: new Date().toISOString(),
+        })
+
+        setPurchaseError("Failed to save purchase to database")
+        return
+      }
+
+      console.log("[v0] Processing purchase success for:", publicKey.toString(), "at", selectedArea.x, selectedArea.y)
+
       // Update local credits state
       onCreditsUpdate(newCreditsBalance)
-
-      const colors = ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#ffa500", "#800080"]
-      const randomColor = colors[Math.floor(Math.random() * colors.length)]
 
       const newBlock = {
         x: selectedArea.x,
@@ -138,8 +166,7 @@ export function PurchaseButton({
         width: selectedArea.width,
         height: selectedArea.height,
         owner: publicKey.toString(),
-        color: randomColor,
-        transaction_signature: `${isWar ? "war" : "credit"}_purchase_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
+        transaction_signature: transactionSignature,
       }
 
       console.log(`[v0] ${isWar ? "Purchase war" : "Credit-based purchase"} successful! Block created:`, newBlock)

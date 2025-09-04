@@ -18,7 +18,8 @@ interface PaymentVerificationModalProps {
 }
 
 const ADMIN_WALLET = "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS"
-const SOL_TO_CREDITS_RATE = 1000 // 1 SOL = 1,000 credits
+const TOKENS_TO_CREDITS_RATE = 100 / 1000000 // 1,000,000 AURIFY tokens = 100 credits
+const AURIFY_TOKEN_ADDRESS = "DrfLXJqsdJxkBbpkhgsVH1YSkhEd5HKEh7SHNv65HTQP"
 const RPC_ENDPOINT = "https://solana-rpc.publicnode.com"
 
 export function PaymentVerificationModal({
@@ -49,20 +50,11 @@ export function PaymentVerificationModal({
     setErrorMessage("")
 
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-      if (!supabaseUrl || !supabaseAnonKey) {
-        console.log("[v0] Supabase environment variables not configured")
-        throw new Error("Database connection not available. Please contact support to enable payment verification.")
-      }
-
-      const supabase = createClient()
-
       const connection = new Connection(RPC_ENDPOINT, "confirmed")
       const adminWalletPubkey = new PublicKey(ADMIN_WALLET)
+      const aurifyTokenMint = new PublicKey(AURIFY_TOKEN_ADDRESS)
 
-      console.log(`[v0] Verifying transaction: ${transactionSignature.trim()}`)
+      console.log(`[v0] Verifying AURIFY token transaction: ${transactionSignature.trim()}`)
 
       const transaction = await connection.getParsedTransaction(transactionSignature.trim(), {
         maxSupportedTransactionVersion: 0,
@@ -82,33 +74,56 @@ export function PaymentVerificationModal({
       const instructions = transaction.transaction.message.instructions
 
       for (const instruction of instructions) {
-        if ("parsed" in instruction && instruction.program === "system") {
+        if ("parsed" in instruction && instruction.program === "spl-token") {
           const parsed = instruction.parsed
-          if (parsed.type === "transfer") {
-            const recipientKey = new PublicKey(parsed.info.destination)
-            const senderKey = new PublicKey(parsed.info.source)
+          if (parsed.type === "transfer" || parsed.type === "transferChecked") {
+            const info = parsed.info
 
-            if (recipientKey.equals(adminWalletPubkey) && senderKey.toBase58() === walletAddress) {
-              transferAmount = parsed.info.lamports
-              isValidTransfer = true
-              break
+            // Verify token mint address matches AURIFY
+            if (info.mint && info.mint !== AURIFY_TOKEN_ADDRESS) {
+              continue
+            }
+
+            // Check if transfer is to admin wallet
+            const recipientKey = new PublicKey(info.destination)
+            const senderKey = new PublicKey(info.source)
+
+            // For token transfers, we need to check the token account owners
+            const recipientAccountInfo = await connection.getParsedAccountInfo(recipientKey)
+            const senderAccountInfo = await connection.getParsedAccountInfo(senderKey)
+
+            if (recipientAccountInfo.value?.data && "parsed" in recipientAccountInfo.value.data) {
+              const recipientData = recipientAccountInfo.value.data.parsed.info
+              if (recipientData.owner === ADMIN_WALLET) {
+                if (senderAccountInfo.value?.data && "parsed" in senderAccountInfo.value.data) {
+                  const senderData = senderAccountInfo.value.data.parsed.info
+                  if (senderData.owner === walletAddress) {
+                    transferAmount = Number.parseInt(info.amount || info.tokenAmount?.amount || "0")
+                    isValidTransfer = true
+                    break
+                  }
+                }
+              }
             }
           }
         }
       }
 
       if (!isValidTransfer || transferAmount <= 0) {
-        throw new Error("No valid SOL transfer to admin wallet found in this transaction")
+        throw new Error("No valid AURIFY token transfer to admin wallet found in this transaction")
       }
 
-      const solAmount = transferAmount / 1000000000 // Convert lamports to SOL
-      const credits = Math.floor(solAmount * SOL_TO_CREDITS_RATE)
+      const tokenAmount = transferAmount / 1000000 // Convert from token decimals (assuming 6 decimals for AURIFY)
+      const credits = Math.floor(tokenAmount * TOKENS_TO_CREDITS_RATE)
 
-      console.log(`[v0] Transaction verified: ${solAmount} SOL = ${credits} credits`)
+      console.log(`[v0] Transaction verified: ${tokenAmount} AURIFY tokens = ${credits} credits`)
 
-      if (solAmount < 0.001) {
-        throw new Error("Minimum transfer amount is 0.001 SOL (1 credit)")
+      if (tokenAmount < 10000) {
+        // Minimum 10,000 tokens for 0.001 credits
+        throw new Error("Minimum transfer amount is 10,000 AURIFY tokens")
       }
+
+      const supabase = createClient()
 
       const { data: existingPayment, error: paymentCheckError } = await supabase
         .from("payments")
@@ -156,24 +171,20 @@ export function PaymentVerificationModal({
       const { error: paymentError } = await supabase.from("payments").insert({
         wallet_address: walletAddress,
         transaction_signature: transactionSignature.trim(),
-        amount_sol: solAmount,
+        amount_sol: tokenAmount, // Reusing this field for token amount
         credits_granted: credits,
         status: "verified",
       })
 
       if (paymentError) {
         console.error("[v0] Failed to record payment:", paymentError)
+        // Don't throw error here as credits were already updated
       }
 
-      console.log(`[v0] Payment verification successful: ${solAmount} SOL = ${credits} credits`)
-      setVerificationStatus("success")
-      onPaymentVerified(credits)
+      console.log(`[v0] Payment verification successful: ${tokenAmount} AURIFY tokens = ${credits} credits`)
 
-      setTimeout(() => {
-        onClose()
-        setTransactionSignature("")
-        setVerificationStatus("idle")
-      }, 2000)
+      setVerificationStatus("success")
+      onPaymentVerified(credits) // Pass only new credits, not total
     } catch (error) {
       console.error("[v0] Payment verification failed:", error)
       const errorMsg = error instanceof Error ? error.message : "Verification failed"
@@ -192,12 +203,12 @@ export function PaymentVerificationModal({
         <Card className="w-full max-w-md bg-white border-2 border-black">
           <CardHeader className="text-center">
             <CardTitle className="text-xl font-bold">💰 VERIFY PAYMENT</CardTitle>
-            <CardDescription>Send SOL to admin wallet, then verify your transaction</CardDescription>
+            <CardDescription>Send AURIFY tokens to admin wallet, then verify your transaction</CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label className="font-bold">1. Send SOL to Admin Wallet:</Label>
+              <Label className="font-bold">1. Send AURIFY Tokens to Admin Wallet:</Label>
               <div className="flex items-center gap-2 p-2 bg-yellow-100 border border-black rounded">
                 <code className="text-xs flex-1 break-all">{ADMIN_WALLET}</code>
                 <Button
@@ -212,8 +223,9 @@ export function PaymentVerificationModal({
             </div>
 
             <div className="p-2 bg-blue-100 border border-black rounded">
-              <p className="text-sm font-bold">Rate: 1 SOL = 1,000 Credits</p>
-              <p className="text-xs">Minimum: 0.001 SOL = 1 Credit</p>
+              <p className="text-sm font-bold">Rate: 1M AURIFY = 100 Credits</p>
+              <p className="text-xs">Minimum: 10,000 AURIFY = 0.001 Credits</p>
+              <p className="text-xs text-gray-600">Token: {AURIFY_TOKEN_ADDRESS}</p>
             </div>
 
             <div className="space-y-2">
@@ -260,7 +272,7 @@ export function PaymentVerificationModal({
             </div>
 
             <div className="text-xs text-gray-600 space-y-1">
-              <p>• Send SOL from any wallet app to the admin address above</p>
+              <p>• Send AURIFY tokens from any wallet app to the admin address above</p>
               <p>• Copy the transaction signature from your wallet</p>
               <p>• Paste it here to verify and receive credits instantly</p>
             </div>

@@ -70,6 +70,7 @@ export default function PixelCanvas() {
 
   const [isSyncing, setIsSyncing] = useState(false)
   const [lastSyncTime, setLastSyncTime] = useState(0)
+  const [isSyncPaused, setIsSyncPaused] = useState(false)
 
   const [hoveredBlock, setHoveredBlock] = useState<PixelBlock | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
@@ -189,9 +190,10 @@ export default function PixelCanvas() {
         hasImage: !!block.imageUrl,
         hasUrl: !!block.url,
         hasAltText: !!block.alt_text,
+        owner: block.owner,
       })
 
-      // First, try to find existing block with matching coordinates
+      // First, try to find existing block with matching coordinates and owner
       const { data: existingBlocks, error: findError } = await supabase
         .from("pixel_blocks")
         .select("id")
@@ -199,6 +201,7 @@ export default function PixelCanvas() {
         .eq("start_y", block.y)
         .eq("width", block.width)
         .eq("height", block.height)
+        .eq("wallet_address", block.owner || "unknown")
 
       if (findError) {
         console.error("[v0] Error finding existing block:", findError)
@@ -214,12 +217,13 @@ export default function PixelCanvas() {
             image_url: block.imageUrl || null,
             link_url: block.url || null,
             alt_text: block.alt_text || null,
-            wallet_address: block.wallet_address || "unknown",
+            wallet_address: block.owner || "unknown",
           })
           .eq("id", existingBlocks[0].id)
           .select()
 
         result = { data, error }
+        console.log("[v0] Updated existing block with ID:", existingBlocks[0].id)
       } else {
         // Insert new block
         const { data, error } = await supabase
@@ -229,7 +233,7 @@ export default function PixelCanvas() {
             start_y: block.y,
             width: block.width,
             height: block.height,
-            wallet_address: block.wallet_address || "unknown",
+            wallet_address: block.owner || "unknown",
             image_url: block.imageUrl || null,
             link_url: block.url || null,
             alt_text: block.alt_text || null,
@@ -238,6 +242,7 @@ export default function PixelCanvas() {
           .select()
 
         result = { data, error }
+        console.log("[v0] Inserted new block")
       }
 
       if (result.error) {
@@ -245,7 +250,7 @@ export default function PixelCanvas() {
         return false
       }
 
-      console.log("[v0] Successfully saved block:", result.data?.[0])
+      console.log("[v0] Successfully saved block to database:", result.data?.[0])
       console.log("[v0] Upload details saved - visible to all users server-wide")
       return true
     } catch (error) {
@@ -319,7 +324,7 @@ export default function PixelCanvas() {
   }
 
   const syncPixelBlocks = useCallback(async () => {
-    if (isSyncing || Date.now() - lastSyncTime < 2000 || isUploadingImage) {
+    if (isSyncing || Date.now() - lastSyncTime < 2000 || isUploadingImage || isSyncPaused) {
       return
     }
 
@@ -417,6 +422,7 @@ export default function PixelCanvas() {
     lastNotifiedBlockCount,
     shownNotifications,
     isUploadingImage,
+    isSyncPaused,
   ])
 
   useEffect(() => {
@@ -489,10 +495,11 @@ export default function PixelCanvas() {
     const updatedBlock = {
       ...blockToUpdate,
       imageUrl,
-      ...(url !== undefined && { url }),
-      ...(message !== undefined && { alt_text: message }),
+      url: url || blockToUpdate.url,
+      alt_text: message || blockToUpdate.alt_text,
     }
 
+    // Update local state immediately
     setPixelBlocks((prev) => {
       const updated = [...prev]
       const globalIndex = prev.findIndex(
@@ -505,12 +512,21 @@ export default function PixelCanvas() {
       return updated
     })
 
+    // Temporarily pause sync to prevent override during upload
+    setIsSyncPaused(true)
+
     const updateSuccess = await updatePixelBlockInDatabase(updatedBlock)
 
     if (updateSuccess) {
       console.log("[v0] Image uploaded successfully for block:", updatedBlock)
+      // Force a fresh load from database to confirm persistence
+      setTimeout(() => {
+        loadPixelBlocksFromDatabase()
+        setIsSyncPaused(false)
+      }, 2000)
     } else {
       console.error("[v0] Failed to update block in database")
+      // Revert local changes if database update failed
       setPixelBlocks((prev) => {
         const reverted = [...prev]
         const globalIndex = prev.findIndex(
@@ -522,6 +538,7 @@ export default function PixelCanvas() {
         }
         return reverted
       })
+      setIsSyncPaused(false)
     }
 
     setTimeout(() => {

@@ -226,10 +226,7 @@ export default function PixelCanvas() {
 
   const loadPixelBlocksFromDatabase = async (): Promise<PixelBlock[]> => {
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-      if (!supabaseUrl || !supabaseKey) {
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
         console.log("[v0] Supabase environment variables not configured, using empty blocks array")
         return []
       }
@@ -868,10 +865,7 @@ export default function PixelCanvas() {
 
   const loadUserCredits = async (walletAddress: string) => {
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-      if (!supabaseUrl || !supabaseKey) {
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
         console.log("[v0] Supabase environment variables not configured, returning 0 credits")
         return 0
       }

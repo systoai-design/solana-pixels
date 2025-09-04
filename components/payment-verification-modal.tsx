@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Copy, CheckCircle, AlertCircle } from "lucide-react"
 import { Connection, PublicKey } from "@solana/web3.js"
 import { ErrorModal } from "./error-modal"
+import { createClient } from "@/lib/supabase/client"
 
 interface PaymentVerificationModalProps {
   isOpen: boolean
@@ -48,8 +49,20 @@ export function PaymentVerificationModal({
     setErrorMessage("")
 
     try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        console.log("[v0] Supabase environment variables not configured")
+        throw new Error("Database connection not available. Please contact support to enable payment verification.")
+      }
+
+      const supabase = createClient()
+
       const connection = new Connection(RPC_ENDPOINT, "confirmed")
       const adminWalletPubkey = new PublicKey(ADMIN_WALLET)
+
+      console.log(`[v0] Verifying transaction: ${transactionSignature.trim()}`)
 
       const transaction = await connection.getParsedTransaction(transactionSignature.trim(), {
         maxSupportedTransactionVersion: 0,
@@ -91,17 +104,22 @@ export function PaymentVerificationModal({
       const solAmount = transferAmount / 1000000000 // Convert lamports to SOL
       const credits = Math.floor(solAmount * SOL_TO_CREDITS_RATE)
 
+      console.log(`[v0] Transaction verified: ${solAmount} SOL = ${credits} credits`)
+
       if (solAmount < 0.001) {
         throw new Error("Minimum transfer amount is 0.001 SOL (1 credit)")
       }
-
-      const supabase = (await import("@/lib/supabase/client")).createClient()
 
       const { data: existingPayment, error: paymentCheckError } = await supabase
         .from("payments")
         .select("id")
         .eq("transaction_signature", transactionSignature.trim())
         .maybeSingle()
+
+      if (paymentCheckError) {
+        console.error("[v0] Error checking existing payment:", paymentCheckError)
+        throw new Error("Database error while checking payment history")
+      }
 
       if (existingPayment) {
         throw new Error("This transaction has already been processed")
@@ -113,8 +131,15 @@ export function PaymentVerificationModal({
         .eq("wallet_address", walletAddress)
         .maybeSingle()
 
+      if (creditsError) {
+        console.error("[v0] Error fetching wallet credits:", creditsError)
+        throw new Error("Database error while fetching current credits")
+      }
+
       const currentCredits = walletCredits?.credits || 0
       const newTotalCredits = currentCredits + credits
+
+      console.log(`[v0] Updating credits: ${currentCredits} + ${credits} = ${newTotalCredits}`)
 
       const { error: upsertError } = await supabase.from("wallet_credits").upsert({
         wallet_address: walletAddress,
@@ -125,7 +150,7 @@ export function PaymentVerificationModal({
 
       if (upsertError) {
         console.error("[v0] Failed to update wallet credits:", upsertError)
-        throw new Error("Failed to update credits")
+        throw new Error("Failed to update credits. Please contact support.")
       }
 
       const { error: paymentError } = await supabase.from("payments").insert({
@@ -140,7 +165,7 @@ export function PaymentVerificationModal({
         console.error("[v0] Failed to record payment:", paymentError)
       }
 
-      console.log(`[v0] Payment verified: ${solAmount} SOL = ${credits} credits`)
+      console.log(`[v0] Payment verification successful: ${solAmount} SOL = ${credits} credits`)
       setVerificationStatus("success")
       onPaymentVerified(credits)
 

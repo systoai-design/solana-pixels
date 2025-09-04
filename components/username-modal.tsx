@@ -42,8 +42,12 @@ export function UsernameModal({
     try {
       const supabase = createClient()
       const { error: updateError } = await supabase
-        .from("users")
-        .update({ username: username.trim() })
+        .from("wallet_credits")
+        .upsert({
+          wallet_address: walletAddress,
+          username: username.trim(),
+          credits: 0,
+        })
         .eq("wallet_address", walletAddress)
 
       if (updateError) {

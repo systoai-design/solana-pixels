@@ -191,6 +191,26 @@ export default function PixelCanvas() {
         hasAltText: !!block.alt_text,
       })
 
+      const { data: existingBlocks, error: fetchError } = await supabase
+        .from("pixel_blocks")
+        .select("*")
+        .eq("start_x", block.x)
+        .eq("start_y", block.y)
+        .eq("width", block.width)
+        .eq("height", block.height)
+
+      if (fetchError) {
+        console.error("[v0] Failed to fetch existing block:", fetchError)
+        return false
+      }
+
+      console.log("[v0] Found existing blocks:", existingBlocks?.length || 0)
+
+      if (!existingBlocks || existingBlocks.length === 0) {
+        console.error("[v0] No matching block found in database to update")
+        return false
+      }
+
       const { error: updateError } = await supabase
         .from("pixel_blocks")
         .update({
@@ -208,6 +228,20 @@ export default function PixelCanvas() {
         return false
       }
 
+      const { data: updatedBlocks, error: verifyError } = await supabase
+        .from("pixel_blocks")
+        .select("image_url, link_url, alt_text")
+        .eq("start_x", block.x)
+        .eq("start_y", block.y)
+        .eq("width", block.width)
+        .eq("height", block.height)
+
+      if (verifyError) {
+        console.error("[v0] Failed to verify update:", verifyError)
+        return false
+      }
+
+      console.log("[v0] Updated block verification:", updatedBlocks?.[0])
       console.log("[v0] Successfully updated block in database - changes will be visible to all users")
       return true
     } catch (error) {

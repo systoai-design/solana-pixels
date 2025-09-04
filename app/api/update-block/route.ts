@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
+import nacl from "tweetnacl"
+import { PublicKey } from "@solana/web3.js"
 
 export async function POST(request: NextRequest) {
   try {
-    const { publicKey, updatedBlock } = await request.json()
+    const { publicKey, updatedBlock, signature, messageToSign } = await request.json()
 
     console.log("[v0] Update block API called:", {
       publicKey,
@@ -12,6 +14,20 @@ export async function POST(request: NextRequest) {
       hasUrl: !!updatedBlock.url,
       hasAltText: !!updatedBlock.alt_text,
     })
+
+    if (!publicKey || !updatedBlock || !signature || !messageToSign) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    const encodedMessage = new TextEncoder().encode(messageToSign)
+    const signatureBytes = Uint8Array.from(atob(signature), (c) => c.charCodeAt(0))
+    const pubKeyBytes = new PublicKey(publicKey).toBytes()
+
+    const verified = nacl.sign.detached.verify(encodedMessage, signatureBytes, pubKeyBytes)
+
+    if (!verified) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+    }
 
     const supabase = createServerClient(
       "https://tomdwpozafthjxgbvoau.supabase.co",
@@ -25,33 +41,39 @@ export async function POST(request: NextRequest) {
       },
     )
 
-    // Update the pixel block in database
-    const { data, error } = await supabase
+    const { data: existing, error: findError } = await supabase
       .from("pixel_blocks")
-      .update({
-        image_url: updatedBlock.imageUrl,
-        link_url: updatedBlock.url,
-        alt_text: updatedBlock.alt_text,
-      })
+      .select("*")
       .eq("start_x", updatedBlock.x)
       .eq("start_y", updatedBlock.y)
       .eq("width", updatedBlock.width)
       .eq("height", updatedBlock.height)
-      .eq("wallet_address", publicKey)
-      .select()
+      .single()
 
-    if (error) {
-      console.error("[v0] Database update error:", error.message)
-      return NextResponse.json({ error: `Database update failed: ${error.message}` }, { status: 500 })
+    if (findError || !existing) {
+      return NextResponse.json({ error: "Block not found" }, { status: 404 })
     }
 
-    if (!data || data.length === 0) {
-      console.log("[v0] No matching block found for update")
-      return NextResponse.json({ error: "Block not found or not owned by wallet" }, { status: 404 })
+    if (existing.wallet_address !== publicKey) {
+      return NextResponse.json({ error: "Not the block owner" }, { status: 403 })
     }
 
-    console.log("[v0] Successfully updated block in database:", data)
-    return NextResponse.json({ success: true, data })
+    const { error: updateError } = await supabase
+      .from("pixel_blocks")
+      .update({
+        image_url: updatedBlock.imageUrl || null,
+        link_url: updatedBlock.url || null,
+        alt_text: updatedBlock.alt_text || null,
+      })
+      .eq("id", existing.id)
+
+    if (updateError) {
+      console.error("[v0] Database update error:", updateError.message)
+      return NextResponse.json({ error: `Database update failed: ${updateError.message}` }, { status: 500 })
+    }
+
+    console.log("[v0] Successfully updated block in database for:", publicKey)
+    return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[v0] Update block API error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

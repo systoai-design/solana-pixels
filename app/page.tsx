@@ -487,8 +487,26 @@ export default function PixelCanvas() {
   }
 
   const handleImageUpload = async (blockIndex: number, imageUrl: string, url?: string, message?: string) => {
+    console.log("[v0] Starting image upload process:", {
+      blockIndex,
+      hasImageUrl: !!imageUrl,
+      hasUrl: !!url,
+      hasMessage: !!message,
+      userBlocksLength: userBlocks.length,
+      totalPixelBlocks: pixelBlocks.length,
+    })
+
     const blockToUpdate = userBlocks[blockIndex]
-    if (!blockToUpdate) return
+    if (!blockToUpdate) {
+      console.error("[v0] Block not found at index:", blockIndex, "Available blocks:", userBlocks.length)
+      return
+    }
+
+    console.log("[v0] Found block to update:", {
+      position: `${blockToUpdate.x},${blockToUpdate.y}`,
+      size: `${blockToUpdate.width}x${blockToUpdate.height}`,
+      owner: blockToUpdate.owner,
+    })
 
     setIsUploadingImage(true)
 
@@ -499,6 +517,13 @@ export default function PixelCanvas() {
       alt_text: message || blockToUpdate.alt_text,
     }
 
+    console.log("[v0] Prepared block for database update:", {
+      hasImageUrl: !!updatedBlock.imageUrl,
+      hasUrl: !!updatedBlock.url,
+      hasAltText: !!updatedBlock.alt_text,
+      owner: updatedBlock.owner,
+    })
+
     // Update local state immediately
     setPixelBlocks((prev) => {
       const updated = [...prev]
@@ -508,24 +533,30 @@ export default function PixelCanvas() {
 
       if (globalIndex !== -1) {
         updated[globalIndex] = updatedBlock
+        console.log("[v0] Updated local state at global index:", globalIndex)
+      } else {
+        console.warn("[v0] Could not find block in global state for local update")
       }
       return updated
     })
 
     // Temporarily pause sync to prevent override during upload
     setIsSyncPaused(true)
+    console.log("[v0] Paused sync during upload")
 
+    console.log("[v0] Calling updatePixelBlockInDatabase...")
     const updateSuccess = await updatePixelBlockInDatabase(updatedBlock)
 
     if (updateSuccess) {
-      console.log("[v0] Image uploaded successfully for block:", updatedBlock)
+      console.log("[v0] ✅ Database update successful - image uploaded successfully for block:", updatedBlock)
       // Force a fresh load from database to confirm persistence
       setTimeout(() => {
+        console.log("[v0] Reloading blocks from database to confirm persistence")
         loadPixelBlocksFromDatabase()
         setIsSyncPaused(false)
       }, 2000)
     } else {
-      console.error("[v0] Failed to update block in database")
+      console.error("[v0] ❌ Failed to update block in database")
       // Revert local changes if database update failed
       setPixelBlocks((prev) => {
         const reverted = [...prev]
@@ -535,6 +566,7 @@ export default function PixelCanvas() {
 
         if (globalIndex !== -1) {
           reverted[globalIndex] = blockToUpdate
+          console.log("[v0] Reverted local changes due to database failure")
         }
         return reverted
       })

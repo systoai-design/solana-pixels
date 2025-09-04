@@ -23,7 +23,6 @@ interface PixelBlock {
   height: number
   owner?: string
   imageUrl?: string
-  color?: string
   url?: string
   transaction_signature?: string
   alt_text?: string
@@ -67,6 +66,7 @@ export default function PixelCanvas() {
   const [isPurchasing, setIsPurchasing] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
   const [isRetracting, setIsRetracting] = useState(false)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
 
   const [isSyncing, setIsSyncing] = useState(false)
   const [lastSyncTime, setLastSyncTime] = useState(0)
@@ -273,7 +273,7 @@ export default function PixelCanvas() {
   }
 
   const syncPixelBlocks = useCallback(async () => {
-    if (isSyncing || Date.now() - lastSyncTime < 2000) {
+    if (isSyncing || Date.now() - lastSyncTime < 2000 || isUploadingImage) {
       return
     }
 
@@ -283,7 +283,26 @@ export default function PixelCanvas() {
 
       if (databaseBlocks.length !== pixelBlocks.length) {
         console.log("[v0] Syncing pixel blocks from database:", databaseBlocks.length, "blocks")
-        setPixelBlocks(databaseBlocks)
+
+        setPixelBlocks((prev) => {
+          const merged = [...databaseBlocks]
+
+          prev.forEach((localBlock) => {
+            const dbIndex = merged.findIndex(
+              (dbBlock) =>
+                dbBlock.x === localBlock.x && dbBlock.y === localBlock.y && dbBlock.owner === localBlock.owner,
+            )
+
+            if (dbIndex !== -1) {
+              const dbBlock = merged[dbIndex]
+              if (localBlock.imageUrl && !dbBlock.imageUrl) {
+                merged[dbIndex] = { ...dbBlock, ...localBlock }
+              }
+            }
+          })
+
+          return merged
+        })
 
         const totalPixels = databaseBlocks.reduce((total, block) => total + block.width * block.height, 0)
         setTotalPixelsSold(totalPixels)
@@ -296,7 +315,6 @@ export default function PixelCanvas() {
           )
 
           if (otherUserBlocks.length > 0) {
-            // Use a more specific notification key based on actual block data
             const blockIds = otherUserBlocks
               .map((block) => `${block.x}-${block.y}-${block.owner}`)
               .sort()
@@ -341,12 +359,19 @@ export default function PixelCanvas() {
         }
       }
     } catch (error) {
-      console.error("[v0] Failed to sync from database:", error)
+      console.error("[v0] Sync error:", error)
     } finally {
       setIsSyncing(false)
-      setLastSyncTime(Date.now())
     }
-  }, [pixelBlocks.length, lastNotifiedBlockCount, isSyncing, lastSyncTime])
+  }, [
+    isSyncing,
+    lastSyncTime,
+    pixelBlocks.length,
+    publicKey,
+    lastNotifiedBlockCount,
+    shownNotifications,
+    isUploadingImage,
+  ])
 
   useEffect(() => {
     const initializeCanvas = async () => {
@@ -413,6 +438,8 @@ export default function PixelCanvas() {
     const blockToUpdate = userBlocks[blockIndex]
     if (!blockToUpdate) return
 
+    setIsUploadingImage(true)
+
     const updatedBlock = {
       ...blockToUpdate,
       imageUrl,
@@ -420,29 +447,42 @@ export default function PixelCanvas() {
       ...(message !== undefined && { alt_text: message }),
     }
 
+    setPixelBlocks((prev) => {
+      const updated = [...prev]
+      const globalIndex = prev.findIndex(
+        (block) => block.x === blockToUpdate.x && block.y === blockToUpdate.y && block.owner === blockToUpdate.owner,
+      )
+
+      if (globalIndex !== -1) {
+        updated[globalIndex] = updatedBlock
+      }
+      return updated
+    })
+
     const updateSuccess = await updatePixelBlockInDatabase(updatedBlock)
 
     if (updateSuccess) {
+      console.log("[v0] Image uploaded successfully for block:", updatedBlock)
+    } else {
+      console.error("[v0] Failed to update block in database")
       setPixelBlocks((prev) => {
-        const updated = [...prev]
+        const reverted = [...prev]
         const globalIndex = prev.findIndex(
           (block) => block.x === blockToUpdate.x && block.y === blockToUpdate.y && block.owner === blockToUpdate.owner,
         )
 
         if (globalIndex !== -1) {
-          updated[globalIndex] = updatedBlock
+          reverted[globalIndex] = blockToUpdate
         }
-        return updated
+        return reverted
       })
-
-      setUserBlocks((prev) => {
-        const updated = [...prev]
-        updated[blockIndex] = updatedBlock
-        return updated
-      })
-
-      console.log("[v0] Image uploaded successfully for block:", updatedBlock)
     }
+
+    setTimeout(() => {
+      setIsUploadingImage(false)
+    }, 3000)
+
+    setSelectedBlockForUpload(null)
   }
 
   const handleRetractPixels = async (area: { x: number; y: number; width: number; height: number }) => {
@@ -637,14 +677,11 @@ export default function PixelCanvas() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // Draw white background
     ctx.fillStyle = "#ffffff"
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    // Draw grid lines for available areas
     drawGrid(ctx, canvas)
 
-    // Draw owned blocks with enhanced visual states
     pixelBlocks.forEach((block) => {
       const isOwnedByCurrentUser = connected && publicKey && block.owner === publicKey.toString()
 
@@ -652,30 +689,24 @@ export default function PixelCanvas() {
         const img = new Image()
         img.crossOrigin = "anonymous"
         img.onload = () => {
-          // Draw the advertisement image - fill the entire block area
           ctx.drawImage(img, block.x, block.y, block.width, block.height)
 
-          // Add subtle border to indicate it's owned (only for user's own blocks)
           if (isOwnedByCurrentUser) {
-            ctx.strokeStyle = "#22c55e" // Green border for user-owned blocks
+            ctx.strokeStyle = "#22c55e"
             ctx.lineWidth = 2
             ctx.strokeRect(block.x, block.y, block.width, block.height)
           }
-          // No text overlays - keep images clean for advertising
         }
         img.src = block.imageUrl
       } else {
-        // STATE: Owned block without image (placeholder)
-        ctx.fillStyle = isOwnedByCurrentUser ? "#dcfce7" : "#dbeafe" // Light green for user, light blue for others
+        ctx.fillStyle = isOwnedByCurrentUser ? "#dcfce7" : "#dbeafe"
         ctx.fillRect(block.x, block.y, block.width, block.height)
 
-        // Add border
         ctx.strokeStyle = isOwnedByCurrentUser ? "#22c55e" : "#3b82f6"
         ctx.lineWidth = 3
         ctx.strokeRect(block.x, block.y, block.width, block.height)
 
         if (isOwnedByCurrentUser) {
-          // Add "UPLOAD IMAGE" text for owned blocks without images
           ctx.fillStyle = "#16a34a"
           ctx.font = "10px monospace"
           ctx.textAlign = "center"
@@ -685,7 +716,6 @@ export default function PixelCanvas() {
           ctx.fillText("IMAGE", centerX, centerY + 8)
           ctx.textAlign = "left"
         } else {
-          // Show owner username for blocks owned by others
           loadBlockOwnerUsername(block.owner || "").then((username) => {
             ctx.fillStyle = "#2563eb"
             ctx.font = "10px monospace"
@@ -700,7 +730,6 @@ export default function PixelCanvas() {
       }
     })
 
-    // Draw selection area
     if (selectedArea) {
       ctx.strokeStyle = "#ef4444"
       ctx.lineWidth = 2
@@ -781,8 +810,8 @@ export default function PixelCanvas() {
           coords.x < block.x + block.width &&
           coords.y >= block.y &&
           coords.y < block.y + block.height &&
-          block.imageUrl && // Only show tooltip for blocks with images
-          block.alt_text, // Only show tooltip if there's a message
+          block.imageUrl &&
+          block.alt_text,
       )
 
       if (hoveredBlock) {
@@ -814,7 +843,6 @@ export default function PixelCanvas() {
 
     if (clickedBlock) {
       if (clickedBlock.imageUrl && clickedBlock.url) {
-        // If block has both image and URL, open the linked website
         let finalUrl = clickedBlock.url.trim()
 
         if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
@@ -828,7 +856,6 @@ export default function PixelCanvas() {
           console.error("[v0] Failed to open advertisement URL:", error)
         }
       } else {
-        // If no URL or no image, allow upload for owned blocks
         const isOwnedByCurrentUser = connected && publicKey && clickedBlock.owner === publicKey.toString()
         if (isOwnedByCurrentUser) {
           const blockIndex = pixelBlocks.findIndex((b) => b.id === clickedBlock.id)
@@ -951,12 +978,11 @@ export default function PixelCanvas() {
   }
 
   const creditsToAurify = (credits: number) => {
-    return (credits * 10000).toLocaleString() // 1 credit = 10,000 AURIFY tokens
+    return (credits * 10000).toLocaleString()
   }
 
   const handlePaymentVerified = async (newCredits: number) => {
     try {
-      // Always add to existing credits, never replace
       const currentCredits = await loadUserCredits(publicKey?.toString() || "")
       const totalCredits = currentCredits + newCredits
       setUserCredits(totalCredits)
@@ -964,7 +990,6 @@ export default function PixelCanvas() {
       console.log(`[v0] Payment verified: Added ${newCredits} credits. Total: ${totalCredits}`)
     } catch (error) {
       console.error("[v0] Error updating credits after payment:", error)
-      // Fallback to adding to current displayed credits if database fails
       setUserCredits((prev) => prev + newCredits)
     }
     setPaymentModalOpen(false)

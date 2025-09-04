@@ -78,6 +78,9 @@ export async function POST(req: Request) {
       wallet_address: publicKey,
       transaction_signature: transactionSignature,
       total_price: creditsNeeded,
+      image_url: null, // Will be updated when user uploads image
+      link_url: null, // Will be updated when user adds website link
+      alt_text: null, // Will be updated when user adds hover message
       created_at: new Date().toISOString(),
     })
 

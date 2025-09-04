@@ -124,6 +124,12 @@ export function ImageUploadModal({ block, isOpen, onClose, onImageUpload, blockI
       // For now, we'll use the resized data URL or existing image
       onImageUpload(blockIndex, finalImageUrl!, url.trim() || undefined, message.trim() || undefined)
 
+      console.log("[v0] Upload details saved:", {
+        imageUrl: finalImageUrl ? "✅ Image saved" : "❌ No image",
+        linkUrl: url.trim() ? `✅ Link: ${url.trim()}` : "❌ No link",
+        altText: message.trim() ? `✅ Message: ${message.trim()}` : "❌ No message",
+      })
+
       // Close modal
       onClose()
       setSelectedFile(null)

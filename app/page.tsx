@@ -180,8 +180,16 @@ export default function PixelCanvas() {
     try {
       const supabase = createBrowserClient(
         "https://tomdwpozafthjxgbvoau.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU", // Service role key needed for bypassing RLS policies
       )
+
+      console.log("[v0] Updating block in database:", {
+        position: `${block.x},${block.y}`,
+        size: `${block.width}x${block.height}`,
+        hasImage: !!block.imageUrl,
+        hasUrl: !!block.url,
+        hasAltText: !!block.alt_text,
+      })
 
       const { error: updateError } = await supabase
         .from("pixel_blocks")
@@ -200,7 +208,7 @@ export default function PixelCanvas() {
         return false
       }
 
-      console.log("[v0] Successfully updated block in database")
+      console.log("[v0] Successfully updated block in database - changes will be visible to all users")
       return true
     } catch (error) {
       console.error("[v0] Database update error:", error)

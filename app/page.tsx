@@ -1116,11 +1116,10 @@ export default function PixelCanvas() {
 
   const handlePaymentVerified = async (newCredits: number) => {
     try {
-      const currentCredits = await loadUserCredits(publicKey?.toString() || "")
-      const totalCredits = currentCredits + newCredits
-      setUserCredits(totalCredits)
+      const updatedCredits = await loadUserCredits(publicKey?.toString() || "")
+      setUserCredits(updatedCredits)
 
-      console.log(`[v0] Payment verified: Added ${newCredits} credits. Total: ${totalCredits}`)
+      console.log(`[v0] Payment verified: Added ${newCredits} credits. New total: ${updatedCredits}`)
     } catch (error) {
       console.error("[v0] Error updating credits after payment:", error)
       setUserCredits((prev) => prev + newCredits)
@@ -1176,6 +1175,12 @@ export default function PixelCanvas() {
               <span className="text-green-600 cyber-font text-sm font-bold">WALLET CONNECTED</span>
             </div>
           )}
+        </div>
+
+        <div className="mt-6 mb-4">
+          <div className="bg-red-600 border-4 border-black p-4 inline-block shadow-lg">
+            <p className="text-white font-bold text-2xl cyber-font tracking-wider">⚠️ TOKEN NOT LIVE YET ⚠️</p>
+          </div>
         </div>
       </div>
 

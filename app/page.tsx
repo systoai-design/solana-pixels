@@ -29,7 +29,6 @@ interface PixelBlock {
 }
 
 const ADMIN_WALLETS = [
-  "SR7Jzh3pQh4Qf6MGXPjbuEPowVAhgh82oAtooTfFBkA", // Primary admin wallet for receiving tokens
   "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS", // Original admin
   "BUbC5ugi4tnscNowHrNfvNsU5SZfMfcnBv7NotvdWyq8", // Added new admin wallet
 ]
@@ -40,9 +39,7 @@ export default function PixelCanvas() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [selectedArea, setSelectedArea] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const [totalPixelsSold, setTotalPixelsSold] = useState(0)
-  const [recentUpdates, setRecentUpdates] = useState<
-    Array<{ user: string; block: string; time: string; timestamp: number }>
-  >([])
+  const [recentUpdates, setRecentUpdates] = useState<Array<{ user: string; block: string; time: string }>>([])
 
   const [isSelecting, setIsSelecting] = useState(false)
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null)
@@ -79,46 +76,6 @@ export default function PixelCanvas() {
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
 
   const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
-
-  const loadUserUsername = async (walletAddress: string): Promise<string> => {
-    if (!walletAddress) return "Unknown"
-
-    try {
-      const supabase = createBrowserClient(
-        "https://tomdwpozafthjxgbvoau.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
-      )
-
-      const { data, error } = await supabase
-        .from("wallet_credits")
-        .select("username")
-        .eq("wallet_address", walletAddress)
-        .maybeSingle()
-
-      if (error || !data?.username) {
-        return walletAddress.slice(0, 8) + "..."
-      }
-
-      return data.username
-    } catch (error) {
-      console.error("[v0] Error loading username:", error)
-      return walletAddress.slice(0, 8) + "..."
-    }
-  }
-
-  const formatRelativeTime = (timestamp: number): string => {
-    const now = Date.now()
-    const diff = now - timestamp
-    const seconds = Math.floor(diff / 1000)
-    const minutes = Math.floor(seconds / 60)
-    const hours = Math.floor(minutes / 60)
-    const days = Math.floor(hours / 24)
-
-    if (seconds < 60) return "Just now"
-    if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`
-    if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`
-    return `${days} day${days > 1 ? "s" : ""} ago`
-  }
 
   useEffect(() => {
     if (connected && publicKey) {
@@ -366,72 +323,6 @@ export default function PixelCanvas() {
     }
   }
 
-  const saveRecentUpdateToDatabase = async (update: {
-    user: string
-    block: string
-    time: string
-    timestamp: number
-  }) => {
-    try {
-      const supabase = createBrowserClient(
-        "https://tomdwpozafthjxgbvoau.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
-      )
-
-      // Get wallet address for this user
-      const walletAddress = publicKey?.toString() || "Unknown"
-
-      const { error } = await supabase.from("recent_updates").insert({
-        wallet_address: walletAddress,
-        username: update.user,
-        action: update.time.includes("RETRACTED") ? "retracted" : "updated",
-        block_info: update.block,
-        created_at: new Date(update.timestamp).toISOString(),
-      })
-
-      if (error) {
-        console.error("[v0] Failed to save recent update:", error)
-      } else {
-        console.log("[v0] Recent update saved to database for real-time sync")
-      }
-    } catch (error) {
-      console.error("[v0] Error saving recent update:", error)
-    }
-  }
-
-  const loadRecentUpdatesFromDatabase = async () => {
-    try {
-      const supabase = createBrowserClient(
-        "https://tomdwpozafthjxgbvoau.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
-      )
-
-      const { data, error } = await supabase
-        .from("recent_updates")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(5)
-
-      if (error) {
-        console.error("[v0] Failed to load recent updates:", error)
-        return []
-      }
-
-      return data.map((update) => ({
-        user: update.username || update.wallet_address?.slice(0, 8) + "..." || "Unknown",
-        block: update.block_info,
-        time:
-          update.action === "retracted"
-            ? `${formatRelativeTime(new Date(update.created_at).getTime())} (RETRACTED)`
-            : formatRelativeTime(new Date(update.created_at).getTime()),
-        timestamp: new Date(update.created_at).getTime(),
-      }))
-    } catch (error) {
-      console.error("[v0] Error loading recent updates:", error)
-      return []
-    }
-  }
-
   const syncPixelBlocks = useCallback(async () => {
     if (isSyncing || Date.now() - lastSyncTime < 2000 || isUploadingImage || isSyncPaused) {
       return
@@ -440,7 +331,6 @@ export default function PixelCanvas() {
     setIsSyncing(true)
     try {
       const databaseBlocks = await loadPixelBlocksFromDatabase()
-      const databaseUpdates = await loadRecentUpdatesFromDatabase()
 
       if (databaseBlocks.length !== pixelBlocks.length) {
         console.log("[v0] Syncing pixel blocks from database:", databaseBlocks.length, "blocks")
@@ -505,26 +395,19 @@ export default function PixelCanvas() {
 
         if (databaseBlocks.length > 0) {
           const latestBlock = databaseBlocks[databaseBlocks.length - 1]
-          loadUserUsername(latestBlock.owner || "").then((username) => {
-            setRecentUpdates((prev) => {
-              const newUpdate = {
-                user: username,
-                block: `${latestBlock.x},${latestBlock.y}`,
-                time: "Just now",
-                timestamp: Date.now(),
-              }
-              if (prev.length === 0 || prev[0].block !== newUpdate.block) {
-                return [newUpdate, ...prev.slice(0, 4)]
-              }
-              return prev
-            })
+          const shortAddress = latestBlock.owner?.slice(0, 8) + "..." || "Unknown"
+          setRecentUpdates((prev) => {
+            const newUpdate = {
+              user: shortAddress,
+              block: `${latestBlock.x},${latestBlock.y}`,
+              time: "Just now",
+            }
+            if (prev.length === 0 || prev[0].block !== newUpdate.block) {
+              return [newUpdate, ...prev.slice(0, 4)]
+            }
+            return prev
           })
         }
-      }
-
-      if (databaseUpdates.length > 0) {
-        setRecentUpdates(databaseUpdates)
-        console.log("[v0] Synced", databaseUpdates.length, "recent updates from database")
       }
     } catch (error) {
       console.error("[v0] Sync error:", error)
@@ -592,18 +475,15 @@ export default function PixelCanvas() {
 
     setSelectedArea(null)
 
-    loadUserUsername(newBlock.owner || "").then(async (username) => {
-      const newUpdate = {
-        user: username,
+    const shortAddress = newBlock.owner?.slice(0, 8) + "..." || "Unknown"
+    setRecentUpdates((prev) => [
+      {
+        user: shortAddress,
         block: `${newBlock.x},${newBlock.y}`,
         time: "Just now",
-        timestamp: Date.now(),
-      }
-
-      setRecentUpdates((prev) => [newUpdate, ...prev.slice(0, 4)])
-
-      await saveRecentUpdateToDatabase(newUpdate)
-    })
+      },
+      ...prev.slice(0, 4),
+    ])
   }
 
   const handleImageUpload = async (blockIndex: number, imageUrl: string, url?: string, message?: string) => {
@@ -784,18 +664,15 @@ export default function PixelCanvas() {
 
       setSelectedArea(null)
 
-      loadUserUsername(publicKey?.toString() || "").then(async (username) => {
-        const newUpdate = {
-          user: username,
+      const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
+      setRecentUpdates((prev) => [
+        {
+          user: shortAddress,
           block: `${area.x},${area.y}`,
           time: "Just now (RETRACTED)",
-          timestamp: Date.now(),
-        }
-
-        setRecentUpdates((prev) => [newUpdate, ...prev.slice(0, 4)])
-
-        await saveRecentUpdateToDatabase(newUpdate)
-      })
+        },
+        ...prev.slice(0, 4),
+      ])
     } finally {
       setIsRetracting(false)
     }
@@ -862,18 +739,15 @@ export default function PixelCanvas() {
         console.error("[v0] Failed to delete block from database")
       }
 
-      loadUserUsername(publicKey?.toString() || "").then(async (username) => {
-        const newUpdate = {
-          user: username,
+      const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
+      setRecentUpdates((prev) => [
+        {
+          user: shortAddress,
           block: `${blockToRemove.x},${blockToRemove.y}`,
           time: "Just now (RETRACTED)",
-          timestamp: Date.now(),
-        }
-
-        setRecentUpdates((prev) => [newUpdate, ...prev.slice(0, 4)])
-
-        await saveRecentUpdateToDatabase(newUpdate)
-      })
+        },
+        ...prev.slice(0, 4),
+      ])
     } finally {
       setIsRetracting(false)
     }
@@ -1156,6 +1030,29 @@ export default function PixelCanvas() {
     }
   }
 
+  const loadUserUsername = async (walletAddress: string) => {
+    try {
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
+
+      const { data, error } = await supabase
+        .from("wallet_credits")
+        .select("username")
+        .eq("wallet_address", walletAddress)
+        .maybeSingle()
+
+      if (error) {
+        return walletAddress.slice(0, 8) + "..."
+      }
+
+      return data?.username || walletAddress.slice(0, 8) + "..."
+    } catch (error) {
+      return walletAddress.slice(0, 8) + "..."
+    }
+  }
+
   const loadBlockOwnerUsername = async (ownerWallet: string) => {
     try {
       const supabase = createBrowserClient(
@@ -1183,10 +1080,6 @@ export default function PixelCanvas() {
     return (credits * 10000).toLocaleString()
   }
 
-  const creditsToPixels = (credits: number) => {
-    return (credits * 10000).toLocaleString()
-  }
-
   const handlePaymentVerified = async (newCredits: number) => {
     try {
       const currentCredits = await loadUserCredits(publicKey?.toString() || "")
@@ -1200,21 +1093,6 @@ export default function PixelCanvas() {
     }
     setPaymentModalOpen(false)
   }
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRecentUpdates((prev) =>
-        prev.map((update) => ({
-          ...update,
-          time: update.time.includes("RETRACTED")
-            ? `${formatRelativeTime(update.timestamp)} (RETRACTED)`
-            : formatRelativeTime(update.timestamp),
-        })),
-      )
-    }, 60000) // Update every minute
-
-    return () => clearInterval(interval)
-  }, [])
 
   return (
     <div className="min-h-screen bg-gray-100 p-4">
@@ -1350,13 +1228,13 @@ export default function PixelCanvas() {
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">ADMIN: 0.1 CREDITS/PIXEL!</p>
-                  <p className="text-base text-black">≈ {creditsToPixels(0.1)} PIXELS/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToAurify(0.1)} AURIFY/PIXEL</p>
                 </div>
               )}
               {!isAdmin && (
                 <div className="bg-blue-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">1 CREDIT/PIXEL</p>
-                  <p className="text-base text-black">≈ {creditsToPixels(1)} PIXELS/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToAurify(1)} AURIFY/PIXEL</p>
                 </div>
               )}
               {connected ? (

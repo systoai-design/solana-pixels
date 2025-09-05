@@ -7,13 +7,20 @@ export async function POST(req: Request) {
     const { selectedArea, publicKey, isWar, creditsNeeded } = body
 
     // Input validation
-    if (!selectedArea || typeof selectedArea !== 'object' || !selectedArea.x || !selectedArea.y || !selectedArea.width || !selectedArea.height) {
+    if (
+      !selectedArea ||
+      typeof selectedArea !== "object" ||
+      !selectedArea.x ||
+      !selectedArea.y ||
+      !selectedArea.width ||
+      !selectedArea.height
+    ) {
       return NextResponse.json({ error: "Invalid selected area provided." }, { status: 400 })
     }
-    if (!publicKey || typeof publicKey !== 'string') {
+    if (!publicKey || typeof publicKey !== "string") {
       return NextResponse.json({ error: "Invalid public key provided." }, { status: 400 })
     }
-    if (typeof creditsNeeded !== 'number' || creditsNeeded <= 0) {
+    if (typeof creditsNeeded !== "number" || creditsNeeded <= 0) {
       return NextResponse.json({ error: "Invalid credits needed." }, { status: 400 })
     }
 
@@ -37,13 +44,34 @@ export async function POST(req: Request) {
       },
     })
 
-    const { data: userId, error: userError } = await supabase.rpc("get_or_create_user", {
-      wallet_addr: publicKey,
-    })
+    let { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("wallet_address", publicKey)
+      .maybeSingle()
 
-    if (userError || !userId) {
-      console.error("[v0] Error getting/creating user:", userError)
+    if (userError) {
+      console.error("[v0] Error fetching user:", userError)
       return NextResponse.json({ error: "Failed to get user information." }, { status: 500 })
+    }
+
+    // Create user if doesn't exist
+    if (!user) {
+      const { data: newUser, error: createError } = await supabase
+        .from("users")
+        .insert({
+          wallet_address: publicKey,
+          total_pixels_owned: 0,
+          total_spent: 0,
+        })
+        .select("id")
+        .single()
+
+      if (createError) {
+        console.error("[v0] Error creating user:", createError)
+        return NextResponse.json({ error: "Failed to create user." }, { status: 500 })
+      }
+      user = newUser
     }
 
     // Fetch current credits
@@ -73,27 +101,53 @@ export async function POST(req: Request) {
     const prefix = isWar ? "war" : "credit"
     const transactionSignature = `${prefix}_purchase_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
 
-    // Perform atomic transaction for deduction and insertion
-    const { data, error: txError } = await supabase.rpc('atomic_purchase', {
-      p_wallet_address: publicKey,
-      p_credits_needed: creditsNeeded,
-      p_start_x: selectedArea.x,
-      p_start_y: selectedArea.y,
-      p_width: selectedArea.width,
-      p_height: selectedArea.height,
-      p_transaction_signature: transactionSignature,
-      p_user_id: userId,
-    })
+    // First, deduct credits
+    const newBalance = currentCredits - creditsNeeded
+    const { error: creditError } = await supabase
+      .from("wallet_credits")
+      .update({ credits: newBalance })
+      .eq("wallet_address", publicKey)
 
-    if (txError) {
-      console.error("[v0] Atomic transaction error:", txError)
-      return NextResponse.json({ error: "Failed to process purchase." }, { status: 500 })
+    if (creditError) {
+      console.error("[v0] Error updating credits:", creditError)
+      return NextResponse.json({ error: "Failed to deduct credits." }, { status: 500 })
     }
 
-    const newCreditsBalance = data?.new_balance || currentCredits - creditsNeeded
+    // Then, create pixel block
+    const { error: blockError } = await supabase.from("pixel_blocks").insert({
+      start_x: selectedArea.x,
+      start_y: selectedArea.y,
+      width: selectedArea.width,
+      height: selectedArea.height,
+      wallet_address: publicKey,
+      owner_id: user.id,
+      transaction_signature: transactionSignature,
+      total_price: creditsNeeded,
+    })
 
-    console.log(`[v0] Purchase completed successfully. New balance: ${newCreditsBalance}`)
-    return NextResponse.json({ success: true, newCreditsBalance, transactionSignature })
+    if (blockError) {
+      console.error("[v0] Error creating pixel block:", blockError)
+      // Rollback credits if block creation fails
+      await supabase.from("wallet_credits").update({ credits: currentCredits }).eq("wallet_address", publicKey)
+      return NextResponse.json({ error: "Failed to create pixel block." }, { status: 500 })
+    }
+
+    // Update user stats
+    const { error: userUpdateError } = await supabase
+      .from("users")
+      .update({
+        total_pixels_owned: selectedArea.width * selectedArea.height,
+        total_spent: creditsNeeded,
+      })
+      .eq("id", user.id)
+
+    if (userUpdateError) {
+      console.error("[v0] Error updating user stats:", userUpdateError)
+      // Continue anyway as this is not critical
+    }
+
+    console.log(`[v0] Purchase completed successfully. New balance: ${newBalance}`)
+    return NextResponse.json({ success: true, newCreditsBalance: newBalance, transactionSignature })
   } catch (error) {
     console.error("[v0] Server-side purchase failed:", error)
     return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 })

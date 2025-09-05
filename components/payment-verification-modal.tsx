@@ -17,9 +17,9 @@ interface PaymentVerificationModalProps {
   onPaymentVerified: (credits: number) => void
 }
 
-const ADMIN_WALLET = "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS"
-const TOKENS_TO_CREDITS_RATE = 100 / 1000000 // 1,000,000 AURIFY tokens = 100 credits
-const AURIFY_TOKEN_ADDRESS = "DrfLXJqsdJxkBbpkhgsVH1YSkhEd5HKEh7SHNv65HTQP"
+const ADMIN_WALLET = "SR7Jzh3pQh4Qf6MGXPjbuEPowVAhgh82oAtooTfFBkA"
+const TOKENS_TO_CREDITS_RATE = 100 / 1000000 // 1,000,000 PIXEL tokens = 100 credits
+const PIXEL_TOKEN_ADDRESS = "DrfLXJqsdJxkBbpkhgsVH1YSkhEd5HKEh7SHNv65HTQP"
 const RPC_ENDPOINT = "https://solana-rpc.publicnode.com"
 
 export function PaymentVerificationModal({
@@ -82,9 +82,9 @@ export function PaymentVerificationModal({
 
       const connection = new Connection(RPC_ENDPOINT, "confirmed")
       const adminWalletPubkey = new PublicKey(ADMIN_WALLET)
-      const aurifyTokenMint = new PublicKey(AURIFY_TOKEN_ADDRESS)
+      const pixelTokenMint = new PublicKey(PIXEL_TOKEN_ADDRESS)
 
-      console.log(`[v0] Verifying AURIFY token transaction: ${trimmedSignature}`)
+      console.log(`[v0] Verifying PIXEL token transaction: ${trimmedSignature}`)
 
       let transaction
       try {
@@ -115,8 +115,8 @@ export function PaymentVerificationModal({
           if (parsed.type === "transfer" || parsed.type === "transferChecked") {
             const info = parsed.info
 
-            // Verify token mint address matches AURIFY
-            if (info.mint && info.mint !== AURIFY_TOKEN_ADDRESS) {
+            // Verify token mint address matches PIXEL
+            if (info.mint && info.mint !== PIXEL_TOKEN_ADDRESS) {
               continue
             }
 
@@ -146,17 +146,17 @@ export function PaymentVerificationModal({
       }
 
       if (!isValidTransfer || transferAmount <= 0) {
-        throw new Error("No valid AURIFY token transfer to admin wallet found in this transaction")
+        throw new Error("No valid PIXEL token transfer to admin wallet found in this transaction")
       }
 
-      const tokenAmount = transferAmount / 1000000 // Convert from token decimals (assuming 6 decimals for AURIFY)
+      const tokenAmount = transferAmount / 1000000 // Convert from token decimals (assuming 6 decimals for PIXEL)
       const credits = Math.floor(tokenAmount * TOKENS_TO_CREDITS_RATE)
 
-      console.log(`[v0] Transaction verified: ${tokenAmount} AURIFY tokens = ${credits} credits`)
+      console.log(`[v0] Transaction verified: ${tokenAmount} PIXEL tokens = ${credits} credits`)
 
       if (tokenAmount < 10000) {
         // Minimum 10,000 tokens for 0.001 credits
-        throw new Error("Minimum transfer amount is 10,000 AURIFY tokens")
+        throw new Error("Minimum transfer amount is 10,000 PIXEL tokens")
       }
 
       const { data: duplicateCheck, error: duplicateError } = await supabase
@@ -216,7 +216,7 @@ export function PaymentVerificationModal({
         throw new Error("Failed to update credits. Please contact support.")
       }
 
-      console.log(`[v0] Payment verification successful: ${tokenAmount} AURIFY tokens = ${credits} credits`)
+      console.log(`[v0] Payment verification successful: ${tokenAmount} PIXEL tokens = ${credits} credits`)
 
       setVerificationStatus("success")
       onPaymentVerified(credits) // Pass only new credits, not total
@@ -238,12 +238,12 @@ export function PaymentVerificationModal({
         <Card className="w-full max-w-md bg-white border-2 border-black">
           <CardHeader className="text-center">
             <CardTitle className="text-xl font-bold">💰 VERIFY PAYMENT</CardTitle>
-            <CardDescription>Send SOL tokens to admin wallet, then verify your transaction</CardDescription>
+            <CardDescription>Send PIXEL tokens to admin wallet, then verify your transaction</CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label className="font-bold">1. Send SOL Tokens to Admin Wallet:</Label>
+              <Label className="font-bold">1. Send PIXEL Tokens to Admin Wallet:</Label>
               <div className="flex items-center gap-2 p-2 bg-yellow-100 border border-black rounded">
                 <code className="text-xs flex-1 break-all">{ADMIN_WALLET}</code>
                 <Button
@@ -258,9 +258,9 @@ export function PaymentVerificationModal({
             </div>
 
             <div className="p-2 bg-blue-100 border border-black rounded">
-              <p className="text-sm font-bold">Rate: 1M SOL = 100 Credits</p>
-              <p className="text-xs">Minimum: 10,000 SOL = 0.001 Credits</p>
-              <p className="text-xs text-gray-600">Token: {AURIFY_TOKEN_ADDRESS}</p>
+              <p className="text-sm font-bold">Rate: 1M PIXEL Tokens = 100 Credits</p>
+              <p className="text-xs">Minimum: 10,000 PIXEL = 0.001 Credits</p>
+              <p className="text-xs text-gray-600">Token: {PIXEL_TOKEN_ADDRESS}</p>
             </div>
 
             <div className="space-y-2">
@@ -307,7 +307,7 @@ export function PaymentVerificationModal({
             </div>
 
             <div className="text-xs text-gray-600 space-y-1">
-              <p>• Send SOL tokens from any wallet app to the admin address above</p>
+              <p>• Send PIXEL tokens from any wallet app to the admin address above</p>
               <p>• Copy the transaction signature from your wallet</p>
               <p>• Paste it here to verify and receive credits instantly</p>
             </div>

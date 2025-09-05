@@ -29,6 +29,7 @@ interface PixelBlock {
 }
 
 const ADMIN_WALLETS = [
+  "SR7Jzh3pQh4Qf6MGXPjbuEPowVAhgh82oAtooTfFBkA", // Primary admin wallet for receiving tokens
   "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS", // Original admin
   "BUbC5ugi4tnscNowHrNfvNsU5SZfMfcnBv7NotvdWyq8", // Added new admin wallet
 ]
@@ -365,6 +366,72 @@ export default function PixelCanvas() {
     }
   }
 
+  const saveRecentUpdateToDatabase = async (update: {
+    user: string
+    block: string
+    time: string
+    timestamp: number
+  }) => {
+    try {
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
+      )
+
+      // Get wallet address for this user
+      const walletAddress = publicKey?.toString() || "Unknown"
+
+      const { error } = await supabase.from("recent_updates").insert({
+        wallet_address: walletAddress,
+        username: update.user,
+        action: update.time.includes("RETRACTED") ? "retracted" : "updated",
+        block_info: update.block,
+        created_at: new Date(update.timestamp).toISOString(),
+      })
+
+      if (error) {
+        console.error("[v0] Failed to save recent update:", error)
+      } else {
+        console.log("[v0] Recent update saved to database for real-time sync")
+      }
+    } catch (error) {
+      console.error("[v0] Error saving recent update:", error)
+    }
+  }
+
+  const loadRecentUpdatesFromDatabase = async () => {
+    try {
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
+      )
+
+      const { data, error } = await supabase
+        .from("recent_updates")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(5)
+
+      if (error) {
+        console.error("[v0] Failed to load recent updates:", error)
+        return []
+      }
+
+      return data.map((update) => ({
+        user: update.username || update.wallet_address?.slice(0, 8) + "..." || "Unknown",
+        block: update.block_info,
+        time:
+          update.action === "retracted"
+            ? `${formatRelativeTime(new Date(update.created_at).getTime())} (RETRACTED)`
+            : formatRelativeTime(new Date(update.created_at).getTime()),
+        timestamp: new Date(update.created_at).getTime(),
+      }))
+    } catch (error) {
+      console.error("[v0] Error loading recent updates:", error)
+      return []
+    }
+  }
+
   const syncPixelBlocks = useCallback(async () => {
     if (isSyncing || Date.now() - lastSyncTime < 2000 || isUploadingImage || isSyncPaused) {
       return
@@ -373,6 +440,7 @@ export default function PixelCanvas() {
     setIsSyncing(true)
     try {
       const databaseBlocks = await loadPixelBlocksFromDatabase()
+      const databaseUpdates = await loadRecentUpdatesFromDatabase()
 
       if (databaseBlocks.length !== pixelBlocks.length) {
         console.log("[v0] Syncing pixel blocks from database:", databaseBlocks.length, "blocks")
@@ -453,6 +521,11 @@ export default function PixelCanvas() {
           })
         }
       }
+
+      if (databaseUpdates.length > 0) {
+        setRecentUpdates(databaseUpdates)
+        console.log("[v0] Synced", databaseUpdates.length, "recent updates from database")
+      }
     } catch (error) {
       console.error("[v0] Sync error:", error)
     } finally {
@@ -519,16 +592,17 @@ export default function PixelCanvas() {
 
     setSelectedArea(null)
 
-    loadUserUsername(newBlock.owner || "").then((username) => {
-      setRecentUpdates((prev) => [
-        {
-          user: username,
-          block: `${newBlock.x},${newBlock.y}`,
-          time: "Just now",
-          timestamp: Date.now(),
-        },
-        ...prev.slice(0, 4),
-      ])
+    loadUserUsername(newBlock.owner || "").then(async (username) => {
+      const newUpdate = {
+        user: username,
+        block: `${newBlock.x},${newBlock.y}`,
+        time: "Just now",
+        timestamp: Date.now(),
+      }
+
+      setRecentUpdates((prev) => [newUpdate, ...prev.slice(0, 4)])
+
+      await saveRecentUpdateToDatabase(newUpdate)
     })
   }
 
@@ -710,16 +784,17 @@ export default function PixelCanvas() {
 
       setSelectedArea(null)
 
-      loadUserUsername(publicKey?.toString() || "").then((username) => {
-        setRecentUpdates((prev) => [
-          {
-            user: username,
-            block: `${area.x},${area.y}`,
-            time: "Just now (RETRACTED)",
-            timestamp: Date.now(),
-          },
-          ...prev.slice(0, 4),
-        ])
+      loadUserUsername(publicKey?.toString() || "").then(async (username) => {
+        const newUpdate = {
+          user: username,
+          block: `${area.x},${area.y}`,
+          time: "Just now (RETRACTED)",
+          timestamp: Date.now(),
+        }
+
+        setRecentUpdates((prev) => [newUpdate, ...prev.slice(0, 4)])
+
+        await saveRecentUpdateToDatabase(newUpdate)
       })
     } finally {
       setIsRetracting(false)
@@ -787,16 +862,17 @@ export default function PixelCanvas() {
         console.error("[v0] Failed to delete block from database")
       }
 
-      loadUserUsername(publicKey?.toString() || "").then((username) => {
-        setRecentUpdates((prev) => [
-          {
-            user: username,
-            block: `${blockToRemove.x},${blockToRemove.y}`,
-            time: "Just now (RETRACTED)",
-            timestamp: Date.now(),
-          },
-          ...prev.slice(0, 4),
-        ])
+      loadUserUsername(publicKey?.toString() || "").then(async (username) => {
+        const newUpdate = {
+          user: username,
+          block: `${blockToRemove.x},${blockToRemove.y}`,
+          time: "Just now (RETRACTED)",
+          timestamp: Date.now(),
+        }
+
+        setRecentUpdates((prev) => [newUpdate, ...prev.slice(0, 4)])
+
+        await saveRecentUpdateToDatabase(newUpdate)
       })
     } finally {
       setIsRetracting(false)
@@ -1107,6 +1183,10 @@ export default function PixelCanvas() {
     return (credits * 10000).toLocaleString()
   }
 
+  const creditsToPixels = (credits: number) => {
+    return (credits * 10000).toLocaleString()
+  }
+
   const handlePaymentVerified = async (newCredits: number) => {
     try {
       const currentCredits = await loadUserCredits(publicKey?.toString() || "")
@@ -1270,13 +1350,13 @@ export default function PixelCanvas() {
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">ADMIN: 0.1 CREDITS/PIXEL!</p>
-                  <p className="text-base text-black">≈ {creditsToAurify(0.1)} AURIFY/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToPixels(0.1)} PIXELS/PIXEL</p>
                 </div>
               )}
               {!isAdmin && (
                 <div className="bg-blue-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">1 CREDIT/PIXEL</p>
-                  <p className="text-base text-black">≈ {creditsToAurify(1)} AURIFY/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToPixels(1)} PIXELS/PIXEL</p>
                 </div>
               )}
               {connected ? (

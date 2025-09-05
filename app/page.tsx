@@ -39,7 +39,9 @@ export default function PixelCanvas() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [selectedArea, setSelectedArea] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const [totalPixelsSold, setTotalPixelsSold] = useState(0)
-  const [recentUpdates, setRecentUpdates] = useState<Array<{ user: string; block: string; time: string }>>([])
+  const [recentUpdates, setRecentUpdates] = useState<
+    Array<{ user: string; block: string; time: string; timestamp: number }>
+  >([])
 
   const [isSelecting, setIsSelecting] = useState(false)
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null)
@@ -76,6 +78,46 @@ export default function PixelCanvas() {
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
 
   const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
+
+  const loadUserUsername = async (walletAddress: string): Promise<string> => {
+    if (!walletAddress) return "Unknown"
+
+    try {
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
+
+      const { data, error } = await supabase
+        .from("wallet_credits")
+        .select("username")
+        .eq("wallet_address", walletAddress)
+        .maybeSingle()
+
+      if (error || !data?.username) {
+        return walletAddress.slice(0, 8) + "..."
+      }
+
+      return data.username
+    } catch (error) {
+      console.error("[v0] Error loading username:", error)
+      return walletAddress.slice(0, 8) + "..."
+    }
+  }
+
+  const formatRelativeTime = (timestamp: number): string => {
+    const now = Date.now()
+    const diff = now - timestamp
+    const seconds = Math.floor(diff / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+
+    if (seconds < 60) return "Just now"
+    if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`
+    if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`
+    return `${days} day${days > 1 ? "s" : ""} ago`
+  }
 
   useEffect(() => {
     if (connected && publicKey) {
@@ -395,17 +437,19 @@ export default function PixelCanvas() {
 
         if (databaseBlocks.length > 0) {
           const latestBlock = databaseBlocks[databaseBlocks.length - 1]
-          const shortAddress = latestBlock.owner?.slice(0, 8) + "..." || "Unknown"
-          setRecentUpdates((prev) => {
-            const newUpdate = {
-              user: shortAddress,
-              block: `${latestBlock.x},${latestBlock.y}`,
-              time: "Just now",
-            }
-            if (prev.length === 0 || prev[0].block !== newUpdate.block) {
-              return [newUpdate, ...prev.slice(0, 4)]
-            }
-            return prev
+          loadUserUsername(latestBlock.owner || "").then((username) => {
+            setRecentUpdates((prev) => {
+              const newUpdate = {
+                user: username,
+                block: `${latestBlock.x},${latestBlock.y}`,
+                time: "Just now",
+                timestamp: Date.now(),
+              }
+              if (prev.length === 0 || prev[0].block !== newUpdate.block) {
+                return [newUpdate, ...prev.slice(0, 4)]
+              }
+              return prev
+            })
           })
         }
       }
@@ -475,15 +519,17 @@ export default function PixelCanvas() {
 
     setSelectedArea(null)
 
-    const shortAddress = newBlock.owner?.slice(0, 8) + "..." || "Unknown"
-    setRecentUpdates((prev) => [
-      {
-        user: shortAddress,
-        block: `${newBlock.x},${newBlock.y}`,
-        time: "Just now",
-      },
-      ...prev.slice(0, 4),
-    ])
+    loadUserUsername(newBlock.owner || "").then((username) => {
+      setRecentUpdates((prev) => [
+        {
+          user: username,
+          block: `${newBlock.x},${newBlock.y}`,
+          time: "Just now",
+          timestamp: Date.now(),
+        },
+        ...prev.slice(0, 4),
+      ])
+    })
   }
 
   const handleImageUpload = async (blockIndex: number, imageUrl: string, url?: string, message?: string) => {
@@ -664,15 +710,17 @@ export default function PixelCanvas() {
 
       setSelectedArea(null)
 
-      const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
-      setRecentUpdates((prev) => [
-        {
-          user: shortAddress,
-          block: `${area.x},${area.y}`,
-          time: "Just now (RETRACTED)",
-        },
-        ...prev.slice(0, 4),
-      ])
+      loadUserUsername(publicKey?.toString() || "").then((username) => {
+        setRecentUpdates((prev) => [
+          {
+            user: username,
+            block: `${area.x},${area.y}`,
+            time: "Just now (RETRACTED)",
+            timestamp: Date.now(),
+          },
+          ...prev.slice(0, 4),
+        ])
+      })
     } finally {
       setIsRetracting(false)
     }
@@ -739,15 +787,17 @@ export default function PixelCanvas() {
         console.error("[v0] Failed to delete block from database")
       }
 
-      const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
-      setRecentUpdates((prev) => [
-        {
-          user: shortAddress,
-          block: `${blockToRemove.x},${blockToRemove.y}`,
-          time: "Just now (RETRACTED)",
-        },
-        ...prev.slice(0, 4),
-      ])
+      loadUserUsername(publicKey?.toString() || "").then((username) => {
+        setRecentUpdates((prev) => [
+          {
+            user: username,
+            block: `${blockToRemove.x},${blockToRemove.y}`,
+            time: "Just now (RETRACTED)",
+            timestamp: Date.now(),
+          },
+          ...prev.slice(0, 4),
+        ])
+      })
     } finally {
       setIsRetracting(false)
     }
@@ -1030,29 +1080,6 @@ export default function PixelCanvas() {
     }
   }
 
-  const loadUserUsername = async (walletAddress: string) => {
-    try {
-      const supabase = createBrowserClient(
-        "https://tomdwpozafthjxgbvoau.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
-      )
-
-      const { data, error } = await supabase
-        .from("wallet_credits")
-        .select("username")
-        .eq("wallet_address", walletAddress)
-        .maybeSingle()
-
-      if (error) {
-        return walletAddress.slice(0, 8) + "..."
-      }
-
-      return data?.username || walletAddress.slice(0, 8) + "..."
-    } catch (error) {
-      return walletAddress.slice(0, 8) + "..."
-    }
-  }
-
   const loadBlockOwnerUsername = async (ownerWallet: string) => {
     try {
       const supabase = createBrowserClient(
@@ -1093,6 +1120,21 @@ export default function PixelCanvas() {
     }
     setPaymentModalOpen(false)
   }
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRecentUpdates((prev) =>
+        prev.map((update) => ({
+          ...update,
+          time: update.time.includes("RETRACTED")
+            ? `${formatRelativeTime(update.timestamp)} (RETRACTED)`
+            : formatRelativeTime(update.timestamp),
+        })),
+      )
+    }, 60000) // Update every minute
+
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <div className="min-h-screen bg-gray-100 p-4">

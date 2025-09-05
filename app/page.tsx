@@ -26,6 +26,8 @@ interface PixelBlock {
   url?: string
   transaction_signature?: string
   alt_text?: string
+  recentTakeover?: boolean
+  takeoverTimestamp?: number
 }
 
 const ADMIN_WALLETS = [
@@ -77,6 +79,8 @@ export default function PixelCanvas() {
 
   const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
 
+  const [recentTakeovers, setRecentTakeovers] = useState<Set<string>>(new Set())
+
   useEffect(() => {
     if (connected && publicKey) {
       setUser({ id: publicKey.toString(), wallet_address: publicKey.toString() })
@@ -127,54 +131,10 @@ export default function PixelCanvas() {
   }
 
   const savePixelBlockToDatabase = async (block: PixelBlock) => {
-    try {
-      const supabase = createBrowserClient(
-        "https://tomdwpozafthjxgbvoau.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
-      )
-
-      if (!block.owner || block.owner === "anonymous") {
-        console.error("[v0] No owner specified for pixel block")
-        return false
-      }
-
-      const ownerId = await getOrCreateUser(block.owner)
-
-      if (!ownerId) {
-        console.error("[v0] Couldn't get user ID for:", block.owner)
-        return false
-      }
-
-      const pricePerPixel = isAdmin ? 0.1 : 1
-      const transactionSignature =
-        block.transaction_signature || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
-
-      const blockToInsert = {
-        start_x: block.x,
-        start_y: block.y,
-        width: block.width,
-        height: block.height,
-        wallet_address: block.owner, // Use wallet_address field instead of owner_id
-        image_url: block.imageUrl || null,
-        link_url: block.url || null,
-        total_price: block.width * block.height * pricePerPixel,
-        alt_text: `Pixel block at ${block.x},${block.y}`,
-        transaction_signature: transactionSignature,
-      }
-
-      const { error: insertError } = await supabase.from("pixel_blocks").insert([blockToInsert])
-
-      if (insertError) {
-        console.error("[v0] Failed to save block to database:", insertError)
-        return false
-      }
-
-      console.log("[v0] Successfully saved new block to database with transaction:", transactionSignature)
-      return true
-    } catch (error) {
-      console.error("[v0] Database save error:", error)
-      return false
-    }
+    // Server-side purchase API already handles database insertion
+    // This function is no longer needed to avoid RLS policy violations
+    console.log("[v0] Block save handled by server-side API")
+    return true
   }
 
   const updatePixelBlockInDatabase = async (block: PixelBlock) => {
@@ -444,47 +404,84 @@ export default function PixelCanvas() {
     }
   }, [])
 
-  const handlePurchaseSuccess = async (newBlock: PixelBlock) => {
-    console.log("[v0] Processing purchase success for:", newBlock.owner, "at", newBlock.x, newBlock.y)
+  const handlePurchaseSuccess = useCallback(
+    async (newBlock: {
+      x: number
+      y: number
+      width: number
+      height: number
+      owner: string
+      color: string
+      transaction_signature?: string
+    }) => {
+      console.log("[v0] Processing purchase success for:", newBlock.owner, "at", newBlock.x, newBlock.y)
 
-    if (!connected || !publicKey) {
-      console.error("[v0] Wallet not connected - cannot process purchase")
-      return
-    }
+      if (!connected || !publicKey) {
+        console.error("[v0] Wallet not connected - cannot process purchase")
+        return
+      }
 
-    setLastPurchaseByUser(`${newBlock.x}-${newBlock.y}-${newBlock.owner}`)
+      setLastPurchaseByUser(`${newBlock.x}-${newBlock.y}-${newBlock.owner}`)
 
-    const saveSuccess = await savePixelBlockToDatabase(newBlock)
+      const saveSuccess = await savePixelBlockToDatabase(newBlock)
 
-    if (saveSuccess) {
-      console.log("[v0] Purchase successfully saved to database")
-      const updatedBlocks = [...pixelBlocks, newBlock]
-      setPixelBlocks(updatedBlocks)
-      setTotalPixelsSold((prev) => prev + newBlock.width * newBlock.height)
+      if (saveSuccess) {
+        console.log("[v0] Purchase successfully saved to database")
+        const updatedBlocks = [...pixelBlocks, newBlock]
+        setPixelBlocks(updatedBlocks)
+        setTotalPixelsSold((prev) => prev + newBlock.width * newBlock.height)
 
-      setLastNotifiedBlockCount(updatedBlocks.length)
-      setShownNotifications((prev) => new Set([...prev, `${newBlock.x}-${newBlock.y}-${newBlock.owner}`]))
+        setLastNotifiedBlockCount(updatedBlocks.length)
+        setShownNotifications((prev) => new Set([...prev, `${newBlock.x}-${newBlock.y}-${newBlock.owner}`]))
 
-      setTimeout(() => {
-        syncPixelBlocks()
-      }, 500)
-    } else {
-      console.error("[v0] Failed to save purchase to database - not updating local state")
-      return
-    }
+        setTimeout(() => {
+          syncPixelBlocks()
+        }, 500)
+      } else {
+        console.error("[v0] Failed to save purchase to database - not updating local state")
+        return
+      }
 
-    setSelectedArea(null)
+      setSelectedArea(null)
 
-    const shortAddress = newBlock.owner?.slice(0, 8) + "..." || "Unknown"
-    setRecentUpdates((prev) => [
-      {
-        user: shortAddress,
-        block: `${newBlock.x},${newBlock.y}`,
-        time: "Just now",
-      },
-      ...prev.slice(0, 4),
-    ])
-  }
+      const shortAddress = newBlock.owner?.slice(0, 8) + "..." || "Unknown"
+      setRecentUpdates((prev) => [
+        {
+          user: shortAddress,
+          block: `${newBlock.x},${newBlock.y}`,
+          time: "Just now",
+        },
+        ...prev.slice(0, 4),
+      ])
+
+      const existingBlocks = pixelBlocks.filter(
+        (block) =>
+          block.x < newBlock.x + newBlock.width &&
+          block.x + block.width > newBlock.x &&
+          block.y < newBlock.y + newBlock.height &&
+          block.y + block.height > newBlock.y &&
+          block.owner !== newBlock.owner,
+      )
+
+      const wasTakeover = existingBlocks.length > 0
+
+      if (wasTakeover) {
+        const blockKey = `${newBlock.x}-${newBlock.y}-${newBlock.width}-${newBlock.height}`
+        setRecentTakeovers((prev) => new Set(prev).add(blockKey))
+
+        setTimeout(() => {
+          setRecentTakeovers((prev) => {
+            const newSet = new Set(prev)
+            newSet.delete(blockKey)
+            return newSet
+          })
+        }, 5000)
+
+        console.log("[v0] Purchase war successful! Block taken over from other users")
+      }
+    },
+    [pixelBlocks, connected, publicKey, setRecentUpdates],
+  )
 
   const handleImageUpload = async (blockIndex: number, imageUrl: string, url?: string, message?: string) => {
     console.log("[v0] Starting image upload process:", {
@@ -783,6 +780,7 @@ export default function PixelCanvas() {
 
     pixelBlocks.forEach((block) => {
       const isOwnedByCurrentUser = connected && publicKey && block.owner === publicKey.toString()
+      const isRecentTakeover = recentTakeovers.has(`${block.x}-${block.y}-${block.width}-${block.height}`)
 
       if (block.imageUrl) {
         const img = new Image()
@@ -795,6 +793,21 @@ export default function PixelCanvas() {
             ctx.lineWidth = 2
             ctx.strokeRect(block.x, block.y, block.width, block.height)
           }
+
+          if (isRecentTakeover) {
+            ctx.strokeStyle = "#dc2626"
+            ctx.lineWidth = 4
+            ctx.strokeRect(block.x - 2, block.y - 2, block.width + 4, block.height + 4)
+
+            ctx.fillStyle = "rgba(220, 38, 38, 0.9)"
+            ctx.fillRect(block.x, block.y - 20, Math.min(block.width, 80), 18)
+
+            ctx.fillStyle = "#ffffff"
+            ctx.font = "bold 12px monospace"
+            ctx.textAlign = "center"
+            ctx.fillText("⚔️ WAR WON!", block.x + Math.min(block.width, 80) / 2, block.y - 6)
+            ctx.textAlign = "left"
+          }
         }
         img.src = block.imageUrl
       } else {
@@ -804,6 +817,21 @@ export default function PixelCanvas() {
         ctx.strokeStyle = isOwnedByCurrentUser ? "#22c55e" : "#3b82f6"
         ctx.lineWidth = 3
         ctx.strokeRect(block.x, block.y, block.width, block.height)
+
+        if (isRecentTakeover) {
+          ctx.strokeStyle = "#dc2626"
+          ctx.lineWidth = 4
+          ctx.strokeRect(block.x - 2, block.y - 2, block.width + 4, block.height + 4)
+
+          ctx.fillStyle = "rgba(220, 38, 38, 0.9)"
+          ctx.fillRect(block.x, block.y - 20, Math.min(block.width, 80), 18)
+
+          ctx.fillStyle = "#ffffff"
+          ctx.font = "bold 12px monospace"
+          ctx.textAlign = "center"
+          ctx.fillText("⚔️ WAR WON!", block.x + Math.min(block.width, 80) / 2, block.y - 6)
+          ctx.textAlign = "left"
+        }
 
         if (isOwnedByCurrentUser) {
           ctx.fillStyle = "#16a34a"
@@ -839,7 +867,7 @@ export default function PixelCanvas() {
       ctx.fillRect(selectedArea.x, selectedArea.y, selectedArea.width, selectedArea.height)
       ctx.setLineDash([])
     }
-  }, [pixelBlocks, selectedArea, connected, publicKey])
+  }, [pixelBlocks, selectedArea, connected, publicKey, recentTakeovers])
 
   const drawGrid = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
     ctx.strokeStyle = "#e0e0e0"
@@ -941,7 +969,7 @@ export default function PixelCanvas() {
     )
 
     if (clickedBlock) {
-      if (clickedBlock.imageUrl && clickedBlock.url) {
+      if (clickedBlock.url) {
         let finalUrl = clickedBlock.url.trim()
 
         if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
@@ -950,16 +978,22 @@ export default function PixelCanvas() {
 
         try {
           window.open(finalUrl, "_blank", "noopener,noreferrer")
-          console.log("[v0] Advertisement clicked:", finalUrl)
+          console.log("[v0] Block website opened:", finalUrl)
         } catch (error) {
-          console.error("[v0] Failed to open advertisement URL:", error)
+          console.error("[v0] Failed to open block website:", error)
         }
+      } else if (clickedBlock.imageUrl) {
+        console.log("[v0] Block clicked but no website URL set")
       } else {
         const isOwnedByCurrentUser = connected && publicKey && clickedBlock.owner === publicKey.toString()
         if (isOwnedByCurrentUser) {
-          const blockIndex = pixelBlocks.findIndex((b) => b.id === clickedBlock.id)
-          setSelectedBlockForUpload({ block: clickedBlock, index: blockIndex })
-          setUploadModalOpen(true)
+          const blockIndex = userBlocks.findIndex((b) => b.id === clickedBlock.id)
+          if (blockIndex !== -1) {
+            setSelectedBlockForUpload({ block: clickedBlock, index: blockIndex })
+            setUploadModalOpen(true)
+          } else {
+            console.error("[v0] Block not found in user's owned blocks")
+          }
         }
       }
     }

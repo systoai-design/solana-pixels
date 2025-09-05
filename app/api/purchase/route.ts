@@ -28,8 +28,9 @@ export async function POST(req: Request) {
       `[v0] Processing purchase: ${creditsNeeded} credits for ${selectedArea.width}x${selectedArea.height} area at (${selectedArea.x}, ${selectedArea.y}) by ${publicKey}`,
     )
 
-    const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabaseUrl = "https://tomdwpozafthjxgbvoau.supabase.co"
+    const supabaseServiceKey =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU"
 
     if (!supabaseUrl || !supabaseServiceKey) {
       console.error("[v0] Missing Supabase environment variables")

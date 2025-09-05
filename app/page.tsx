@@ -1076,8 +1076,8 @@ export default function PixelCanvas() {
     }
   }
 
-  const creditsToAurify = (credits: number) => {
-    return (credits * 10000).toLocaleString()
+  const creditsToPixel = (credits: number) => {
+    return credits * 10000 // 1 credit = 10,000 PIXEL tokens
   }
 
   const handlePaymentVerified = async (newCredits: number) => {
@@ -1228,13 +1228,13 @@ export default function PixelCanvas() {
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">ADMIN: 0.1 CREDITS/PIXEL!</p>
-                  <p className="text-base text-black">≈ {creditsToAurify(0.1)} AURIFY/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToPixel(0.1)} PIXEL/PIXEL</p>
                 </div>
               )}
               {!isAdmin && (
                 <div className="bg-blue-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">1 CREDIT/PIXEL</p>
-                  <p className="text-base text-black">≈ {creditsToAurify(1)} AURIFY/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToPixel(1)} PIXEL/PIXEL</p>
                 </div>
               )}
               {connected ? (

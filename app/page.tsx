@@ -31,8 +31,9 @@ interface PixelBlock {
 }
 
 const ADMIN_WALLETS = [
-  "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS", // Original admin
-  "BUbC5ugi4tnscNowHrNfvNsU5SZfMfcnBv7NotvdWyq8", // Added new admin wallet
+  "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS",
+  "BUbC5ugi4tnscNowHrNfvNsU5SZfMfcnBv7NotvdWyq8",
+  "5xarmfJGDSiKV9dLKYksZ6GV4JpfZAGz6FmzShLcqVUz",
 ]
 
 export default function PixelCanvas() {
@@ -80,6 +81,56 @@ export default function PixelCanvas() {
   const isAdmin = connected && publicKey && ADMIN_WALLETS.includes(publicKey.toString())
 
   const [recentTakeovers, setRecentTakeovers] = useState<Set<string>>(new Set())
+
+  const canRetractBlock = (block: PixelBlock): boolean => {
+    if (!connected || !publicKey) return false
+
+    // Admins can retract any block
+    if (isAdmin) {
+      console.log(
+        `[v0] Admin ${publicKey.toString().slice(0, 8)}... can retract block owned by ${block.owner?.slice(0, 8)}...`,
+      )
+      return true
+    }
+
+    // Regular users can only retract their own blocks
+    return block.owner === publicKey.toString()
+  }
+
+  const logAdminAction = async (action: string, targetBlock: PixelBlock, targetOwner?: string) => {
+    if (!isAdmin || !publicKey) return
+
+    try {
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+      )
+
+      const logEntry = {
+        admin_wallet: publicKey.toString(),
+        action: action,
+        target_block: `${targetBlock.x},${targetBlock.y} (${targetBlock.width}x${targetBlock.height})`,
+        target_owner: targetOwner || targetBlock.owner,
+        timestamp: new Date().toISOString(),
+      }
+
+      console.log(`[v0] Admin Action Log:`, logEntry)
+
+      // Store in recent updates for transparency
+      const shortAdmin = publicKey.toString().slice(0, 8) + "..."
+      const shortTarget = (targetOwner || targetBlock.owner)?.slice(0, 8) + "..."
+      setRecentUpdates((prev) => [
+        {
+          user: `${shortAdmin} (ADMIN)`,
+          block: `${action.toUpperCase()} ${targetBlock.x},${targetBlock.y} from ${shortTarget}`,
+          time: "Just now",
+        },
+        ...prev.slice(0, 4),
+      ])
+    } catch (error) {
+      console.error("[v0] Failed to log admin action:", error)
+    }
+  }
 
   useEffect(() => {
     if (connected && publicKey) {
@@ -219,39 +270,11 @@ export default function PixelCanvas() {
     }
   }
 
-  const deletePixelBlockFromDatabase = async (block: PixelBlock) => {
-    try {
-      const supabase = createBrowserClient(
-        "https://tomdwpozafthjxgbvoau.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
-      )
-
-      const { error: deleteError } = await supabase
-        .from("pixel_blocks")
-        .delete()
-        .eq("start_x", block.x)
-        .eq("start_y", block.y)
-        .eq("width", block.width)
-        .eq("height", block.height)
-
-      if (deleteError) {
-        console.error("[v0] Failed to delete block from database:", deleteError)
-        return false
-      }
-
-      console.log("[v0] Successfully deleted block from database")
-      return true
-    } catch (error) {
-      console.error("[v0] Database delete error:", error)
-      return false
-    }
-  }
-
   const loadPixelBlocksFromDatabase = async (): Promise<PixelBlock[]> => {
     try {
       const supabase = createBrowserClient(
         "https://tomdwpozafthjxgbvoau.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
       )
 
       const { data, error } = await supabase.from("pixel_blocks").select("*")
@@ -280,6 +303,57 @@ export default function PixelCanvas() {
     } catch (error) {
       console.error("[v0] Database load error:", error)
       return []
+    }
+  }
+
+  const deletePixelBlockFromDatabase = async (block: PixelBlock) => {
+    try {
+      const supabase = createBrowserClient(
+        "https://tomdwpozafthjxgbvoau.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSI6ImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
+      )
+
+      // First verify the block exists
+      const { data: existingBlock, error: checkError } = await supabase
+        .from("pixel_blocks")
+        .select("id")
+        .eq("id", block.id)
+        .single()
+
+      if (checkError || !existingBlock) {
+        console.log("[v0] Block already deleted or doesn't exist:", block.id)
+        return true
+      }
+
+      // Perform the deletion
+      const { error: deleteError } = await supabase.from("pixel_blocks").delete().eq("id", block.id)
+
+      if (deleteError) {
+        console.error("[v0] Failed to delete block from database:", deleteError)
+        return false
+      }
+
+      // Verify deletion was successful
+      const { data: verifyBlock, error: verifyError } = await supabase
+        .from("pixel_blocks")
+        .select("id")
+        .eq("id", block.id)
+        .single()
+
+      if (verifyError && verifyError.code === "PGRST116") {
+        // Block not found - deletion successful
+        console.log("[v0] Successfully deleted and verified block removal from database")
+        return true
+      } else if (verifyBlock) {
+        console.error("[v0] Block still exists after deletion attempt:", block.id)
+        return false
+      }
+
+      console.log("[v0] Successfully deleted block from database")
+      return true
+    } catch (error) {
+      console.error("[v0] Error deleting block from database:", error)
+      return false
     }
   }
 
@@ -539,38 +613,60 @@ export default function PixelCanvas() {
     setIsSyncPaused(true)
 
     try {
+      console.log("[v0] Checking wallet connection...")
       if (!signMessage || !publicKey) {
         throw new Error("Wallet not connected or signMessage not available")
       }
+      console.log("[v0] Wallet connected, preparing signature...")
 
       const messageToSign = `Update block at ${updatedBlock.x},${updatedBlock.y} with image ${updatedBlock.imageUrl}`
+      console.log("[v0] Message to sign:", messageToSign)
+
       const encodedMessage = new TextEncoder().encode(messageToSign)
+      console.log("[v0] Requesting signature from wallet...")
+
       const signedMessage = await signMessage(encodedMessage)
       const signature = Buffer.from(signedMessage).toString("base64")
+      console.log("[v0] Signature obtained, calling API...")
+
+      const requestBody = {
+        publicKey: publicKey.toString(),
+        updatedBlock,
+        signature,
+        messageToSign,
+      }
+      console.log("[v0] API request body prepared:", {
+        publicKey: requestBody.publicKey,
+        blockPosition: `${requestBody.updatedBlock.x},${requestBody.updatedBlock.y}`,
+        hasSignature: !!requestBody.signature,
+      })
 
       const response = await fetch("/api/update-block", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          publicKey: publicKey.toString(),
-          updatedBlock,
-          signature,
-          messageToSign,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
+      console.log("[v0] API response status:", response.status, response.statusText)
+
       if (!response.ok) {
-        throw new Error(`Update failed: ${response.statusText}`)
+        const errorText = await response.text()
+        console.error("[v0] API error response:", errorText)
+        throw new Error(`Update failed: ${response.statusText} - ${errorText}`)
       }
 
-      console.log("[v0] Successfully updated block via API")
+      const responseData = await response.json()
+      console.log("[v0] API response data:", responseData)
+      console.log("[v0] Successfully updated block via API - changes saved to database")
 
       setTimeout(() => {
+        console.log("[v0] Resuming sync after successful upload...")
         setIsSyncPaused(false)
         syncPixelBlocks()
       }, 1000)
     } catch (error) {
       console.error("[v0] Failed to update block:", error)
+      console.log("[v0] Upload failed - resuming sync...")
       setIsSyncPaused(false)
     } finally {
       setIsUploadingImage(false)
@@ -578,6 +674,11 @@ export default function PixelCanvas() {
       setSelectedBlockForUpload(null)
     }
 
+    console.log("[v0] Upload details saved:", {
+      imageUrl: imageUrl ? "✅ Image saved" : "❌ No image",
+      linkUrl: url ? `✅ Link: ${url}` : "❌ No link",
+      altText: message ? `✅ Message: ${message}` : "❌ No message",
+    })
     console.log("[v0] Image upload process completed")
   }
 
@@ -597,11 +698,30 @@ export default function PixelCanvas() {
         )
       })
 
+      const otherUsersBlocks = blocksToRemove.filter((block) => block.owner !== publicKey?.toString())
+
+      if (otherUsersBlocks.length > 0) {
+        const owners = [...new Set(otherUsersBlocks.map((block) => block.owner?.slice(0, 8) + "..."))]
+        const confirmMessage = `⚠️ ADMIN ACTION: You are about to retract ${otherUsersBlocks.length} blocks owned by other users: ${owners.join(", ")}. This action cannot be undone. Continue?`
+
+        if (!confirm(confirmMessage)) {
+          console.log("[v0] Admin cancelled retraction of other users' blocks")
+          setIsRetracting(false)
+          return
+        }
+
+        console.log(`[v0] Admin confirmed retraction of ${otherUsersBlocks.length} blocks from other users`)
+      }
+
       const totalPixelsToRefund = blocksToRemove.reduce((total, block) => total + block.width * block.height, 0)
       const refundAmount = isAdmin ? Math.ceil(totalPixelsToRefund * 0.1) : totalPixelsToRefund * 1
 
       let allDeleted = true
       for (const block of blocksToRemove) {
+        if (block.owner !== publicKey?.toString()) {
+          await logAdminAction("RETRACT_AREA", block, block.owner)
+        }
+
         const deleteSuccess = await deletePixelBlockFromDatabase(block)
         if (!deleteSuccess) {
           allDeleted = false
@@ -612,7 +732,7 @@ export default function PixelCanvas() {
         try {
           const supabase = createBrowserClient(
             "https://tomdwpozafthjxgbvoau.supabase.co",
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSI6ImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
           )
 
           const { data: currentWallet, error: fetchError } = await supabase
@@ -681,6 +801,21 @@ export default function PixelCanvas() {
     try {
       console.log(`[v0] Admin retracting individual block:`, blockToRemove)
 
+      const isOtherUsersBlock = blockToRemove.owner !== publicKey?.toString()
+
+      if (isOtherUsersBlock) {
+        const ownerDisplay = blockToRemove.owner?.slice(0, 8) + "..."
+        const confirmMessage = `⚠️ ADMIN ACTION: You are about to retract a block owned by ${ownerDisplay}. This action cannot be undone. Continue?`
+
+        if (!confirm(confirmMessage)) {
+          console.log("[v0] Admin cancelled retraction of other user's block")
+          return
+        }
+
+        console.log(`[v0] Admin confirmed retraction of block from ${ownerDisplay}`)
+        await logAdminAction("RETRACT_INDIVIDUAL", blockToRemove, blockToRemove.owner)
+      }
+
       const pixelsToRefund = blockToRemove.width * blockToRemove.height
       const refundAmount = isAdmin ? Math.ceil(pixelsToRefund * 0.1) : pixelsToRefund * 1
 
@@ -690,7 +825,7 @@ export default function PixelCanvas() {
         try {
           const supabase = createBrowserClient(
             "https://tomdwpozafthjxgbvoau.supabase.co",
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzNTE2MTksImV4cCI6MjA3MTkyNzYxOX0.vxD10P1s0BCQaBu2GmmrviuyWsS99IP05qnZ7567niM",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSI6ImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
           )
 
           const { data: currentWallet, error: fetchError } = await supabase
@@ -1177,10 +1312,20 @@ export default function PixelCanvas() {
           )}
         </div>
 
-        <div className="mt-6 mb-4">
-          <div className="bg-red-600 border-4 border-black p-4 inline-block shadow-lg">
-            <p className="text-white font-bold text-2xl cyber-font tracking-wider">⚠️ TOKEN NOT LIVE YET ⚠️</p>
-          </div>
+        <div className="mt-6 mb-4"></div>
+
+        <div className="mt-4 mb-6">
+          <a
+            href="https://x.com/solmillionpixel"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-3 hover:bg-gray-800 text-white font-bold py-3 px-6 border-4 border-white shadow-lg transition-all duration-200 hover:scale-105 cyber-font bg-red-600"
+          >
+            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+            FOLLOW @SOLMILLIONPIXEL
+          </a>
         </div>
       </div>
 
@@ -1247,8 +1392,14 @@ export default function PixelCanvas() {
               )}
             </div>
             {isAdmin && (
-              <div className="mt-2 p-2 bg-yellow-200 border-2 border-black text-center">
-                <p className="text-black font-bold text-sm">👑 ADMIN ACCESS 👑</p>
+              <div className="bg-yellow-100 border-2 border-yellow-500 p-3 rounded-lg mb-4">
+                <h3 className="font-bold text-yellow-800 text-sm mb-2">👑 ADMIN PRIVILEGES ACTIVE</h3>
+                <div className="text-xs text-yellow-700 space-y-1">
+                  <p>• Can retract ANY user's blocks</p>
+                  <p>• All actions are logged and visible</p>
+                  <p>• Confirmation required for other users' blocks</p>
+                  <p>• 99% discount on purchases (0.001 credits/pixel)</p>
+                </div>
               </div>
             )}
           </Card>
@@ -1266,14 +1417,14 @@ export default function PixelCanvas() {
               </div>
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
-                  <p className="font-bold comic-font text-black text-lg">ADMIN: 0.1 CREDITS/PIXEL!</p>
-                  <p className="text-base text-black">≈ {creditsToPixel(0.1)} PIXEL/PIXEL</p>
+                  <p className="font-bold comic-font text-black text-lg">ADMIN: 0.001 CREDITS/PIXEL!</p>
+                  <p className="text-base text-black">≈ {creditsToPixel(0.001)} PIXEL/PIXEL</p>
                 </div>
               )}
               {!isAdmin && (
-                <div className="bg-blue-200 p-3 border-2 border-black">
-                  <p className="font-bold comic-font text-black text-lg">1 CREDIT/PIXEL</p>
-                  <p className="text-base text-black">≈ {creditsToPixel(1)} PIXEL/PIXEL</p>
+                <div className="bg-red-200 p-3 border-2 border-black">
+                  <p className="font-bold comic-font text-black text-lg">0.01 CREDITS/PIXEL</p>
+                  <p className="text-base text-black">≈ {creditsToPixel(0.01)} PIXEL/PIXEL</p>
                 </div>
               )}
               {connected ? (
@@ -1325,42 +1476,56 @@ export default function PixelCanvas() {
           </Card>
 
           {connected && (
+            /* Enhanced block management UI for admins */
             <Card className="p-4 bg-white border-4 border-black">
               <h3 className="font-bold text-xl mb-4 text-center comic-font">🎨 MY BLOCKS</h3>
-              {userBlocks.length > 0 ? (
+              {userBlocks.length > 0 && (
                 <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {userBlocks.map((block, i) => (
-                    <div key={i} className="bg-gray-100 p-2 border border-black text-xs">
-                      <p className="font-bold cyber-font">BLOCK {i + 1}</p>
-                      <p>
-                        SIZE: {block.width}x{block.height}
-                      </p>
-                      <p>
-                        POSITION: ({block.x}, {block.y})
-                      </p>
-                      {block.url && <p className="text-blue-600 truncate">URL: {block.url}</p>}
-                      <div className="flex gap-1 mt-1">
-                        <Button
-                          size="sm"
-                          className="retro-button text-xs flex-1 text-black font-bold"
-                          onClick={() => openUploadModal(block, i)}
-                        >
-                          {block.imageUrl ? "CHANGE DETAILS" : "UPLOAD DETAILS"}
-                        </Button>
-                        {isAdmin && (
-                          <Button
-                            size="sm"
-                            className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 border-2 border-black"
-                            onClick={() => handleRetractIndividualBlock(block)}
-                          >
-                            RETRACT
-                          </Button>
-                        )}
+                  {userBlocks.map((block, index) => {
+                    const isOwnBlock = block.owner === publicKey?.toString()
+                    return (
+                      <div
+                        key={`${block.x}-${block.y}-${index}`}
+                        className={`flex justify-between items-center p-2 border rounded ${
+                          isOwnBlock ? "bg-green-50 border-green-300" : "bg-orange-50 border-orange-300"
+                        }`}
+                      >
+                        <div className="text-sm">
+                          <div className="font-bold text-black">
+                            Block {block.x},{block.y} ({block.width}×{block.height})
+                          </div>
+                          {!isOwnBlock && (
+                            <div className="text-xs text-orange-600">Owner: {block.owner?.slice(0, 8)}...</div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          {(isOwnBlock || isAdmin) && (
+                            <Button
+                              onClick={() => openUploadModal(block, index)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1"
+                            >
+                              UPLOAD DETAILS
+                            </Button>
+                          )}
+                          {isAdmin && (
+                            <Button
+                              onClick={() => handleRetractIndividualBlock(block)}
+                              className={`text-xs px-2 py-1 ${
+                                isOwnBlock
+                                  ? "bg-orange-600 hover:bg-orange-700 text-white"
+                                  : "bg-red-600 hover:bg-red-700 text-white"
+                              }`}
+                            >
+                              {isOwnBlock ? "🗑️ RETRACT" : "⚠️ FORCE RETRACT"}
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
-              ) : (
+              )}
+              {!userBlocks.length && (
                 <p className="text-center text-black comic-font">
                   NO BLOCKS OWNED YET.
                   <br />

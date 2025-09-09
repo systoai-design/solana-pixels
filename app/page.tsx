@@ -1145,7 +1145,7 @@ export default function PixelCanvas() {
     if (!canvas) return
 
     canvas.width = 1000
-    canvas.height = 1000
+    canvas.height = 1600
 
     drawCanvas()
   }, [drawCanvas])
@@ -1332,12 +1332,12 @@ export default function PixelCanvas() {
             <div
               ref={containerRef}
               className="relative overflow-auto border-4 border-black bg-white"
-              style={{ height: "600px", maxHeight: "600px" }}
+              style={{ height: "1600px", maxHeight: "1600px" }}
             >
               <canvas
                 ref={canvasRef}
                 className="border border-gray-300 cursor-pointer bg-pink-50"
-                style={{ height: "1000px", maxHeight: "1000px" }}
+                style={{ height: "1600px", maxHeight: "1600px" }}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}

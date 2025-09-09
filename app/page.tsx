@@ -1296,7 +1296,7 @@ export default function PixelCanvas() {
           </a>
 
           <a
-            href="https://pump.fun/"
+            href="https://pump.fun/coin/An2GSi4nTVidAmZVqvX1b5Ym5q81NhNW4uB41ehqpump"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-3 hover:bg-green-700 text-white font-bold py-3 px-6 border-4 border-white shadow-lg transition-all duration-200 hover:scale-105 cyber-font bg-green-600 ml-4"

@@ -733,7 +733,7 @@ export default function PixelCanvas() {
         try {
           const supabase = createBrowserClient(
             "https://tomdwpozafthjxgbvoau.supabase.co",
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSI6ImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
           )
 
           const { data: currentWallet, error: fetchError } = await supabase
@@ -826,7 +826,7 @@ export default function PixelCanvas() {
         try {
           const supabase = createBrowserClient(
             "https://tomdwpozafthjxgbvoau.supabase.co",
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSI6ImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
           )
 
           const { data: currentWallet, error: fetchError } = await supabase
@@ -1167,12 +1167,7 @@ export default function PixelCanvas() {
 
   const retroStats = [
     { label: "PIXELS SOLD", value: totalPixelsSold.toLocaleString(), color: "text-red-600" },
-    {
-      label: "CREDITS PER PIXEL",
-      value: isAdmin ? "0.1" : "1",
-      color: isAdmin ? "text-blue-600" : "text-green-600",
-    },
-    { label: "PIXELS LEFT", value: (1000000 - totalPixelsSold).toLocaleString(), color: "text-black" },
+    { label: "PIXELS LEFT", value: (1000000 - totalPixelsSold).toLocaleString(), color: "text-green-600" },
   ]
 
   const loadUserCredits = async (walletAddress: string) => {
@@ -1325,17 +1320,19 @@ export default function PixelCanvas() {
         <RetroStats stats={retroStats} />
       </div>
 
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-3">
-          <Card className="p-4 bg-white border-4 border-black">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-4 gap-4 md:gap-6">
+        <div className="xl:col-span-3 order-2 xl:order-1">
+          <Card className="p-2 md:p-4 bg-white border-4 border-black">
             <div className="bg-blue-600 p-2 mb-4">
-              <h2 className="text-white cyber-font text-xl text-center font-bold">&gt; THE ETERNAL CANVAS &lt;</h2>
+              <h2 className="text-white cyber-font text-lg md:text-xl text-center font-bold">
+                &gt; THE ETERNAL CANVAS &lt;
+              </h2>
             </div>
 
             <div
               ref={containerRef}
               className="relative overflow-auto border-4 border-black bg-white"
-              style={{ height: "1000px", maxHeight: "1000px" }}
+              style={{ height: "600px", maxHeight: "600px" }}
             >
               <canvas
                 ref={canvasRef}
@@ -1356,7 +1353,21 @@ export default function PixelCanvas() {
           </Card>
         </div>
 
-        <div className="space-y-6">
+        <div className="order-1 xl:order-2 space-y-4">
+          <Card className="p-3 md:p-4 bg-white border-4 border-black">
+            <div className="bg-green-600 p-2 mb-3">
+              <h3 className="text-white cyber-font text-sm md:text-base text-center font-bold">PIXEL STATS</h3>
+            </div>
+            <div className="space-y-3">
+              {retroStats.map((stat, i) => (
+                <div key={i} className="text-center p-2 border-2 border-gray-300 bg-gray-50">
+                  <div className={`text-lg md:text-xl font-bold ${stat.color}`}>{stat.value}</div>
+                  <div className="text-xs md:text-sm font-bold mt-1">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
           <Card className="p-4 bg-white border-4 border-black">
             <h3 className="font-bold text-xl mb-4 text-center comic-font text-black">🔗 CONNECT WALLET</h3>
             <div className="space-y-3">
@@ -1394,14 +1405,8 @@ export default function PixelCanvas() {
           <Card className="p-4 bg-white border-4 border-black">
             <h3 className="font-bold text-xl mb-4 text-center comic-font text-black">💸 BUY PIXELS</h3>
             <div className="space-y-3">
-              <div className="bg-gray-200 p-3 border-2 border-black">
-                <p className="font-bold comic-font text-black text-lg">MIN SIZE: 10x10 PIXELS</p>
-                <p className="text-base text-black">PERFECT FOR ADS & BRANDING!</p>
-              </div>
-              <div className="bg-gray-200 p-3 border-2 border-black">
-                <p className="font-bold comic-font text-black text-lg">FULL AD FEATURES!</p>
-                <p className="text-base text-black">IMAGES, LINKS & HOVER MESSAGES</p>
-              </div>
+              
+              
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">ADMIN: 0.001 CREDITS/PIXEL!</p>

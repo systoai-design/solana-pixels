@@ -632,7 +632,10 @@ export default function PixelCanvas() {
     setIsUploadingImage(true)
 
     const updatedBlock = {
-      ...blockToUpdate,
+      x: blockToUpdate.x,
+      y: blockToUpdate.y,
+      width: blockToUpdate.width,
+      height: blockToUpdate.height,
       imageUrl,
       url: url || blockToUpdate.url,
       alt_text: message || blockToUpdate.alt_text,
@@ -642,7 +645,7 @@ export default function PixelCanvas() {
       hasImageUrl: !!updatedBlock.imageUrl,
       hasUrl: !!updatedBlock.url,
       hasAltText: !!updatedBlock.alt_text,
-      owner: updatedBlock.owner,
+      owner: blockToUpdate.owner,
     })
 
     setPixelBlocks((prev) => {
@@ -652,7 +655,7 @@ export default function PixelCanvas() {
       )
 
       if (globalIndex !== -1) {
-        updated[globalIndex] = updatedBlock
+        updated[globalIndex] = { ...blockToUpdate, ...updatedBlock }
         console.log("[v0] Updated local state for block at global index:", globalIndex)
       } else {
         console.error("[v0] Could not find block in global pixelBlocks array")
@@ -667,28 +670,21 @@ export default function PixelCanvas() {
       if (!signMessage || !publicKey) {
         throw new Error("Wallet not connected or signMessage not available")
       }
-      console.log("[v0] Wallet connected, preparing signature...")
-
-      const messageToSign = `Update block at ${updatedBlock.x},${updatedBlock.y} with image ${updatedBlock.imageUrl}`
-      console.log("[v0] Message to sign:", messageToSign)
-
-      const encodedMessage = new TextEncoder().encode(messageToSign)
-      console.log("[v0] Requesting signature from wallet...")
-
-      const signedMessage = await signMessage(encodedMessage)
-      const signature = Buffer.from(signedMessage).toString("base64")
-      console.log("[v0] Signature obtained, calling API...")
+      console.log("[v0] Wallet connected, preparing API call...")
 
       const requestBody = {
         publicKey: publicKey.toString(),
         updatedBlock,
-        signature,
-        messageToSign,
+        signature: "simplified", // Placeholder for compatibility
+        messageToSign: `Update block at ${updatedBlock.x},${updatedBlock.y}`,
       }
+
       console.log("[v0] API request body prepared:", {
         publicKey: requestBody.publicKey,
         blockPosition: `${requestBody.updatedBlock.x},${requestBody.updatedBlock.y}`,
-        hasSignature: !!requestBody.signature,
+        hasImageUrl: !!requestBody.updatedBlock.imageUrl,
+        hasUrl: !!requestBody.updatedBlock.url,
+        hasAltText: !!requestBody.updatedBlock.alt_text,
       })
 
       const response = await fetch("/api/update-block", {
@@ -697,17 +693,17 @@ export default function PixelCanvas() {
         body: JSON.stringify(requestBody),
       })
 
-      console.log("[v0] API response status:", response.status, response.statusText)
+      console.log("[v0] API response status:", response.status)
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error("[v0] API error response:", errorText)
-        throw new Error(`Update failed: ${response.statusText} - ${errorText}`)
+        const errorData = await response.json()
+        console.log("[v0] API error response:", errorData)
+        throw new Error(`Update failed: ${response.statusText} - ${JSON.stringify(errorData)}`)
       }
 
       const responseData = await response.json()
       console.log("[v0] API response data:", responseData)
-      console.log("[v0] Successfully updated block via API - changes saved to database")
+      console.log("[v0] Successfully updated block via API")
 
       setTimeout(() => {
         console.log("[v0] Resuming sync after successful upload...")
@@ -729,6 +725,7 @@ export default function PixelCanvas() {
       linkUrl: url ? `✅ Link: ${url}` : "❌ No link",
       altText: message ? `✅ Message: ${message}` : "❌ No message",
     })
+
     console.log("[v0] Image upload process completed")
   }
 

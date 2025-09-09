@@ -246,7 +246,10 @@ export function PurchaseButton({
 
       {selectedArea && (
         <div className="text-sm text-center bg-white p-2 border-2 border-black rounded font-bold text-black">
-          Cost: <span className={hasEnoughCredits ? "text-green-600" : "text-red-600"}>{creditsNeeded} Credits</span>
+          <div>
+            Cost: <span className={hasEnoughCredits ? "text-green-600" : "text-red-600"}>{creditsNeeded} Credits</span>
+          </div>
+          <div className="text-xs text-gray-500">≈ {(creditsNeeded * 10000).toLocaleString()} PIXEL Tokens</div>
           <div className="text-xs text-gray-600 mt-1">Your Balance: {userCredits} Credits</div>
           {isWar && <div className="text-xs text-orange-600 mt-1 font-bold">⚔️ PURCHASE WAR MODE ⚔️</div>}
         </div>

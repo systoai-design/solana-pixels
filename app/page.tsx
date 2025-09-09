@@ -1287,31 +1287,10 @@ export default function PixelCanvas() {
           />
         </div>
 
-        <h1 className="text-6xl font-bold text-black mb-4 jersey-font">
-          🎨 <RainbowText>SOL PIXEL</RainbowText> 🎨
-        </h1>
-        <div className="bg-yellow-200 border-4 border-black p-4 inline-block">
-          <p className="text-black font-bold text-xl comic-font">
-            ⚡ <BlinkingText>DIGITAL ADVERTISING CANVAS</BlinkingText> ON SOLANA BLOCKCHAIN! ⚡
-          </p>
-        </div>
+        
+        
 
-        <div className="mt-4 flex justify-center items-center gap-4">
-          <VisitorCounter />
-          <div className="text-black cyber-font">ESTABLISHED 2024</div>
-          {isAdmin && (
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500 blink"></div>
-              <span className="text-red-600 cyber-font text-sm font-bold">ADMIN MODE</span>
-            </div>
-          )}
-          {connected && (
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-green-500"></div>
-              <span className="text-green-600 cyber-font text-sm font-bold">WALLET CONNECTED</span>
-            </div>
-          )}
-        </div>
+        
 
         <div className="mt-6 mb-4"></div>
 
@@ -1419,13 +1398,13 @@ export default function PixelCanvas() {
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">ADMIN: 0.001 CREDITS/PIXEL!</p>
-                  <p className="text-base text-black">≈ {creditsToPixel(0.001)} PIXEL/PIXEL</p>
+                  <p className="text-sm text-black">≈ 10 PIXEL TOKENS/PIXEL</p>
                 </div>
               )}
               {!isAdmin && (
                 <div className="bg-red-200 p-3 border-2 border-black">
-                  <p className="font-bold comic-font text-black text-lg">0.01 CREDITS/PIXEL</p>
-                  <p className="text-base text-black">≈ {creditsToPixel(0.01)} PIXEL/PIXEL</p>
+                  <p className="font-bold comic-font text-black text-lg">0.2 CREDITS/PIXEL</p>
+                  <p className="text-sm text-black">≈ 2,000 PIXEL TOKENS/PIXEL</p>
                 </div>
               )}
               {connected ? (

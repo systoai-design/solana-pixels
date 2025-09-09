@@ -18,7 +18,7 @@ interface PaymentVerificationModalProps {
 }
 
 const ADMIN_WALLET = "8AuzH3n5RuGPYVyeh94JgoFGcofUJFLtWm9gwYaV7Euo"
-const TOKENS_TO_CREDITS_RATE = 100 / 10000 // 10,000 PIXEL tokens = 100 credits
+const TOKENS_TO_CREDITS_RATE = 100 / 200000 // 200,000 PIXEL tokens = 100 credits
 const PIXEL_TOKEN_ADDRESS = "Token TBA" // Updated PIXEL token address to new contract address
 const RPC_ENDPOINT = "https://solana-rpc.publicnode.com"
 
@@ -154,9 +154,9 @@ export function PaymentVerificationModal({
 
       console.log(`[v0] Transaction verified: ${tokenAmount} PIXEL tokens = ${credits} credits`)
 
-      if (tokenAmount < 100) {
+      if (tokenAmount < 2000) {
         // Minimum 100 tokens for 0.001 credits
-        throw new Error("Minimum transfer amount is 100 PIXEL tokens")
+        throw new Error("Minimum transfer amount is 2000 PIXEL tokens")
       }
 
       const { data: duplicateCheck, error: duplicateError } = await supabase
@@ -258,8 +258,8 @@ export function PaymentVerificationModal({
             </div>
 
             <div className="p-2 bg-blue-100 border border-black rounded">
-              <p className="text-sm font-bold">Rate: 10,000 PIXEL Tokens = 100 Credits</p>
-              <p className="text-xs">Minimum: 100 PIXEL = 0.001 Credits</p>
+              <p className="text-sm font-bold">Rate: 200,000 PIXEL Tokens = 100 Credits</p>
+              <p className="text-xs">Minimum: 2000 PIXEL = 0.001 Credits</p>
               <p className="text-xs text-gray-600">Token: {PIXEL_TOKEN_ADDRESS}</p>
             </div>
 

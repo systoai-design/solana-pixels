@@ -11,8 +11,8 @@ export function JerseyHero() {
       </p>
 
       <div className="space-y-4">
-        <div className="jersey-font text-xl text-blue-600 rainbow-text">1 CREDIT PER PIXEL</div>
-        <div className="jersey-font text-sm text-gray-600">≈ 10,000 SOL PER PIXEL</div>
+        <div className="jersey-font text-xl text-blue-600 rainbow-text">0.2 CREDITS PER PIXEL</div>
+        <div className="jersey-font text-sm text-gray-600">≈ 2,000 PIXEL TOKENS PER PIXEL</div>
 
         <button className="retro-button jersey-font text-xl px-8 py-4 bg-yellow-300 hover:bg-yellow-400 border-4 border-black">
           START BUYING PIXELS
@@ -26,7 +26,7 @@ export function JerseyHero() {
         </div>
 
         <div className="retro-border bg-blue-200 p-4">
-          <div className="jersey-font text-2xl text-black">10B SOL</div>
+          <div className="jersey-font text-2xl text-black">2B PIXEL</div>
           <div className="comic-font text-sm text-black">TOTAL VALUE</div>
         </div>
 

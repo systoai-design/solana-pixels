@@ -178,7 +178,6 @@ export function PurchaseButton({
   const hasEnoughCredits = userCredits >= creditsNeeded
   const isWar = isPurchaseWar()
   const existingOwners = getExistingOwners()
-  const showRetractButton = isAdmin && getExistingBlocks().length > 0
 
   return (
     <div className="space-y-2">
@@ -191,7 +190,7 @@ export function PurchaseButton({
         </div>
       )}
 
-      {showRetractButton ? (
+      {isAdmin && getExistingBlocks().length > 0 ? (
         <Button
           onClick={handleRetract}
           disabled={isPurchasing}
@@ -203,7 +202,7 @@ export function PurchaseButton({
               Retracting...
             </>
           ) : (
-            "🗑️ RETRACT SELECTED AREA"
+            "🗑️ RETRACT PIXELS (ADMIN)"
           )}
         </Button>
       ) : (

@@ -83,6 +83,8 @@ export default function PixelCanvas() {
 
   const [recentTakeovers, setRecentTakeovers] = useState<Set<string>>(new Set())
 
+  const [adminRetractMode, setAdminRetractMode] = useState(false)
+
   const canRetractBlock = (block: PixelBlock): boolean => {
     if (!connected || !publicKey) return false
 
@@ -307,7 +309,7 @@ export default function PixelCanvas() {
     }
   }
 
-  const deletePixelBlockFromDatabase = async (block: PixelBlock) => {
+  const deletePixelBlockFromDatabase = async (blockId: string) => {
     try {
       const supabase = createBrowserClient(
         "https://tomdwpozafthjxgbvoau.supabase.co",
@@ -318,16 +320,16 @@ export default function PixelCanvas() {
       const { data: existingBlock, error: checkError } = await supabase
         .from("pixel_blocks")
         .select("id")
-        .eq("id", block.id)
+        .eq("id", blockId)
         .single()
 
       if (checkError || !existingBlock) {
-        console.log("[v0] Block already deleted or doesn't exist:", block.id)
+        console.log("[v0] Block already deleted or doesn't exist:", blockId)
         return true
       }
 
       // Perform the deletion
-      const { error: deleteError } = await supabase.from("pixel_blocks").delete().eq("id", block.id)
+      const { error: deleteError } = await supabase.from("pixel_blocks").delete().eq("id", blockId)
 
       if (deleteError) {
         console.error("[v0] Failed to delete block from database:", deleteError)
@@ -338,7 +340,7 @@ export default function PixelCanvas() {
       const { data: verifyBlock, error: verifyError } = await supabase
         .from("pixel_blocks")
         .select("id")
-        .eq("id", block.id)
+        .eq("id", blockId)
         .single()
 
       if (verifyError && verifyError.code === "PGRST116") {
@@ -346,7 +348,7 @@ export default function PixelCanvas() {
         console.log("[v0] Successfully deleted and verified block removal from database")
         return true
       } else if (verifyBlock) {
-        console.error("[v0] Block still exists after deletion attempt:", block.id)
+        console.error("[v0] Block still exists after deletion attempt:", blockId)
         return false
       }
 
@@ -723,7 +725,7 @@ export default function PixelCanvas() {
           await logAdminAction("RETRACT_AREA", block, block.owner)
         }
 
-        const deleteSuccess = await deletePixelBlockFromDatabase(block)
+        const deleteSuccess = await deletePixelBlockFromDatabase(block.id!)
         if (!deleteSuccess) {
           allDeleted = false
         }
@@ -796,91 +798,55 @@ export default function PixelCanvas() {
     }
   }
 
-  const handleRetractIndividualBlock = async (blockToRemove: any) => {
+  const handleRetractIndividualBlock = async (blockId: string) => {
     if (!isAdmin) return
 
+    setIsRetracting(true)
     try {
-      console.log(`[v0] Admin retracting individual block:`, blockToRemove)
+      console.log(`[v0] Admin retracting individual block: ${blockId}`)
+
+      const blockToRemove = pixelBlocks.find((block) => block.id === blockId)
+      if (!blockToRemove) {
+        console.log("[v0] Block not found for retraction")
+        return
+      }
 
       const isOtherUsersBlock = blockToRemove.owner !== publicKey?.toString()
 
       if (isOtherUsersBlock) {
-        const ownerDisplay = blockToRemove.owner?.slice(0, 8) + "..."
-        const confirmMessage = `⚠️ ADMIN ACTION: You are about to retract a block owned by ${ownerDisplay}. This action cannot be undone. Continue?`
+        const ownerDisplay = blockToRemove.owner?.slice(0, 8) + "..." || "Unknown"
+        const confirmMessage = `⚠️ ADMIN ACTION: Retract block owned by ${ownerDisplay}? This action cannot be undone.`
 
         if (!confirm(confirmMessage)) {
-          console.log("[v0] Admin cancelled retraction of other user's block")
+          console.log("[v0] Admin cancelled individual block retraction")
+          setIsRetracting(false)
           return
         }
-
-        console.log(`[v0] Admin confirmed retraction of block from ${ownerDisplay}`)
-        await logAdminAction("RETRACT_INDIVIDUAL", blockToRemove, blockToRemove.owner)
       }
 
-      const pixelsToRefund = blockToRemove.width * blockToRemove.height
-      const refundAmount = isAdmin ? Math.ceil(pixelsToRefund * 0.1) : pixelsToRefund * 1
+      // Calculate refund amount
+      const pixelCount = blockToRemove.width * blockToRemove.height
+      const refundAmount = isAdmin ? Math.ceil(pixelCount * 0.001) : Math.ceil(pixelCount * 0.01)
 
-      const deleteSuccess = await deletePixelBlockFromDatabase(blockToRemove)
-
-      if (deleteSuccess) {
-        try {
-          const supabase = createBrowserClient(
-            "https://tomdwpozafthjxgbvoau.supabase.co",
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
-          )
-
-          const { data: currentWallet, error: fetchError } = await supabase
-            .from("wallet_credits")
-            .select("credits")
-            .eq("wallet_address", publicKey?.toString())
-            .maybeSingle()
-
-          const currentCredits = currentWallet?.credits || 0
-          const newCreditsBalance = currentCredits + refundAmount
-
-          const { error: updateError } = await supabase.from("wallet_credits").upsert({
-            wallet_address: publicKey?.toString(),
-            credits: newCreditsBalance,
-            username: publicKey?.toString().slice(0, 8) + "...",
-          })
-
-          if (!updateError) {
-            console.log(`[v0] Refunded ${refundAmount} credits for individual block. New balance: ${newCreditsBalance}`)
-            setUserCredits(newCreditsBalance)
-          } else {
-            console.error("[v0] Failed to refund credits:", updateError)
-          }
-        } catch (error) {
-          console.error("[v0] Error processing credit refund:", error)
-        }
-
-        setPixelBlocks((prev) => {
-          return prev.filter(
-            (block) =>
-              !(
-                block.x === blockToRemove.x &&
-                block.y === blockToRemove.y &&
-                block.width === blockToRemove.width &&
-                block.height === blockToRemove.height &&
-                block.owner === blockToRemove.owner
-              ),
-          )
-        })
-
-        setTotalPixelsSold((prev) => Math.max(0, prev - blockToRemove.width * blockToRemove.height))
-      } else {
-        console.error("[v0] Failed to delete block from database")
+      // Delete from database
+      const deleteSuccess = await deletePixelBlockFromDatabase(blockToRemove.id!)
+      if (!deleteSuccess) {
+        throw new Error("Failed to delete block from database")
       }
 
-      const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
-      setRecentUpdates((prev) => [
-        {
-          user: shortAddress,
-          block: `${blockToRemove.x},${blockToRemove.y}`,
-          time: "Just now (RETRACTED)",
-        },
-        ...prev.slice(0, 4),
-      ])
+      // Update local state
+      setPixelBlocks((prev) => prev.filter((block) => block.id !== blockId))
+      setUserBlocks((prev) => prev.filter((block) => block.id !== blockId))
+
+      // Refund credits if it's the admin's own block
+      if (blockToRemove.owner === publicKey?.toString()) {
+        await loadUserCredits()
+        console.log(`[v0] Refunded ${refundAmount} credits for retracted block`)
+      }
+
+      console.log(`[v0] Successfully retracted individual block: ${blockId}`)
+    } catch (error) {
+      console.error("[v0] Failed to retract individual block:", error)
     } finally {
       setIsRetracting(false)
     }
@@ -901,18 +867,20 @@ export default function PixelCanvas() {
   }, [connected, publicKey, pixelBlocks])
 
   const drawCanvas = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const canvasElement = canvasRef.current
+    if (!canvasElement) return
 
-    const ctx = canvas.getContext("2d")
+    const ctx = canvasElement.getContext("2d")
     if (!ctx) return
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.clearRect(0, 0, canvasElement.width, canvasElement.height)
 
     ctx.fillStyle = "#ffffff"
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillRect(0, 0, canvasElement.width, canvasElement.height)
 
-    drawGrid(ctx, canvas)
+    drawGrid(ctx, canvasElement)
+
+    const PIXEL_SIZE = 10
 
     pixelBlocks.forEach((block) => {
       const isOwnedByCurrentUser = connected && publicKey && block.owner === publicKey.toString()
@@ -1092,6 +1060,24 @@ export default function PixelCanvas() {
   }
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const PIXEL_SIZE = 10
+    const canvasElement = canvasRef.current
+
+    if (adminRetractMode && isAdmin) {
+      const rect = canvasElement.getBoundingClientRect()
+      const x = Math.floor((e.clientX - rect.left) / PIXEL_SIZE)
+      const y = Math.floor((e.clientY - rect.top) / PIXEL_SIZE)
+
+      const clickedBlock = pixelBlocks.find(
+        (block) => x >= block.x && x < block.x + block.width && y >= block.y && y < block.y + block.height,
+      )
+
+      if (clickedBlock) {
+        handleRetractIndividualBlock(clickedBlock.id!)
+      }
+      return
+    }
+
     if (isSelecting) return
 
     const coords = getCanvasCoordinates(e)
@@ -1141,11 +1127,11 @@ export default function PixelCanvas() {
   }
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const canvasElement = canvasRef.current
+    if (!canvasElement) return
 
-    canvas.width = 1000
-    canvas.height = 1600
+    canvasElement.width = 1000
+    canvasElement.height = 1600
 
     drawCanvas()
   }, [drawCanvas])
@@ -1405,8 +1391,6 @@ export default function PixelCanvas() {
           <Card className="p-4 bg-white border-4 border-black">
             <h3 className="font-bold text-xl mb-4 text-center comic-font text-black">💸 BUY PIXELS</h3>
             <div className="space-y-3">
-              
-              
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">ADMIN: 0.001 CREDITS/PIXEL!</p>
@@ -1468,7 +1452,6 @@ export default function PixelCanvas() {
           </Card>
 
           {connected && (
-            /* Enhanced block management UI for admins */
             <Card className="p-4 bg-white border-4 border-black">
               <h3 className="font-bold text-xl mb-4 text-center comic-font">🎨 MY BLOCKS</h3>
               {userBlocks.length > 0 && (
@@ -1501,7 +1484,7 @@ export default function PixelCanvas() {
                           )}
                           {isAdmin && (
                             <Button
-                              onClick={() => handleRetractIndividualBlock(block)}
+                              onClick={() => handleRetractIndividualBlock(block.id!)}
                               className={`text-xs px-2 py-1 ${
                                 isOwnBlock
                                   ? "bg-orange-600 hover:bg-orange-700 text-white"
@@ -1524,6 +1507,59 @@ export default function PixelCanvas() {
                   BUY SOME PIXELS TO GET STARTED!
                 </p>
               )}
+            </Card>
+          )}
+
+          {isAdmin && (
+            <Card className="p-4 bg-yellow-50 border-4 border-yellow-500">
+              <div className="bg-yellow-600 p-2 mb-4">
+                <h2 className="text-white cyber-font text-lg md:text-xl text-center font-bold">👑 ADMIN CONTROLS</h2>
+              </div>
+
+              <div className="space-y-3">
+                <Button
+                  onClick={() => setAdminRetractMode(!adminRetractMode)}
+                  className={`w-full font-bold py-3 border-2 border-black shadow-lg ${
+                    adminRetractMode
+                      ? "bg-red-600 hover:bg-red-700 text-white"
+                      : "bg-orange-600 hover:bg-orange-700 text-white"
+                  }`}
+                >
+                  {adminRetractMode ? "🔴 EXIT RETRACT MODE" : "🗑️ ENTER RETRACT MODE"}
+                </Button>
+
+                {adminRetractMode && (
+                  <div className="bg-red-100 border-2 border-red-500 p-3 rounded">
+                    <p className="text-red-800 font-bold text-sm text-center mb-2">⚠️ RETRACT MODE ACTIVE ⚠️</p>
+                    <p className="text-red-700 text-xs text-center">
+                      Click any block on the canvas to retract it. Use with caution!
+                    </p>
+                  </div>
+                )}
+
+                <Button
+                  onClick={async () => {
+                    if (
+                      confirm(
+                        "⚠️ DANGER: This will retract ALL blocks on the canvas. This action cannot be undone. Continue?",
+                      )
+                    ) {
+                      setIsRetracting(true)
+                      try {
+                        for (const block of pixelBlocks) {
+                          await handleRetractIndividualBlock(block.id!)
+                        }
+                      } finally {
+                        setIsRetracting(false)
+                      }
+                    }
+                  }}
+                  disabled={isRetracting || pixelBlocks.length === 0}
+                  className="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-3 border-2 border-black shadow-lg disabled:bg-gray-400"
+                >
+                  {isRetracting ? "🔄 RETRACTING..." : "💥 RETRACT ALL BLOCKS"}
+                </Button>
+              </div>
             </Card>
           )}
         </div>

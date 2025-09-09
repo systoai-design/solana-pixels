@@ -11,7 +11,7 @@ import { PurchaseButton } from "@/components/purchase-button"
 import { ImageUploadModal } from "@/components/image-upload-modal"
 import { CreditsDisplay } from "@/components/credits-display"
 import { PaymentVerificationModal } from "@/components/payment-verification-modal"
-import { VisitorCounter, ScrollingMarquee, BlinkingText, RainbowText, RetroStats } from "@/components/retro-elements"
+import { ScrollingMarquee, RetroStats } from "@/components/retro-elements"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { UsernameModal } from "@/components/username-modal"
 
@@ -311,7 +311,7 @@ export default function PixelCanvas() {
     try {
       const supabase = createBrowserClient(
         "https://tomdwpozafthjxgbvoau.supabase.co",
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSI6ImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
       )
 
       // First verify the block exists
@@ -1287,13 +1287,6 @@ export default function PixelCanvas() {
           />
         </div>
 
-        
-        
-
-        
-
-        <div className="mt-6 mb-4"></div>
-
         <div className="mt-4 mb-6">
           <a
             href="https://x.com/solmillionpixel"
@@ -1305,6 +1298,20 @@ export default function PixelCanvas() {
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
             </svg>
             FOLLOW @SOLMILLIONPIXEL
+          </a>
+
+          <a
+            href="https://pump.fun/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-3 hover:bg-green-700 text-white font-bold py-3 px-6 border-4 border-white shadow-lg transition-all duration-200 hover:scale-105 cyber-font bg-green-600 ml-4"
+          >
+            <img
+              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Pump_fun_logo-2Ab7Vc0aD6cc2yr563BOEkrBQv6z1j.png"
+              alt="Pump.fun"
+              className="w-6 h-6"
+            />
+            $PIXEL
           </a>
         </div>
       </div>

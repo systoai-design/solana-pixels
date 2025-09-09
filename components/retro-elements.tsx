@@ -111,9 +111,7 @@ export function VisitorCounter() {
 
 export function ScrollingMarquee({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden bg-black text-green-400 py-2 border-2 border-green-400">
-      <div className="scroll-text cyber-font">{children}</div>
-    </div>
+    null
   )
 }
 

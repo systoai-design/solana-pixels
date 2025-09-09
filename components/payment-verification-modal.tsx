@@ -17,7 +17,7 @@ interface PaymentVerificationModalProps {
   onPaymentVerified: (credits: number) => void
 }
 
-const ADMIN_WALLET = "5zTruG1kMNAEL8XXxZJ4YFPZFqncGhgaQupJBC14vH3S"
+const ADMIN_WALLET = "8AuzH3n5RuGPYVyeh94JgoFGcofUJFLtWm9gwYaV7Euo"
 const TOKENS_TO_CREDITS_RATE = 100 / 10000 // 10,000 PIXEL tokens = 100 credits
 const PIXEL_TOKEN_ADDRESS = "9xryrj7SYPJbrb9JE3dbiuqHmBxTSUiy9WK3PoYHpump" // Updated PIXEL token address to new contract address
 const RPC_ENDPOINT = "https://solana-rpc.publicnode.com"

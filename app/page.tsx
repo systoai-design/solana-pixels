@@ -34,6 +34,7 @@ const ADMIN_WALLETS = [
   "5zA5RkrFVF9n9eruetEdZFbcbQ2hNJnLrgPx1gc7AFnS",
   "BUbC5ugi4tnscNowHrNfvNsU5SZfMfcnBv7NotvdWyq8",
   "5xarmfJGDSiKV9dLKYksZ6GV4JpfZAGz6FmzShLcqVUz",
+  "8AuzH3n5RuGPYVyeh94JgoFGcofUJFLtWm9gwYaV7Euo",
 ]
 
 export default function PixelCanvas() {

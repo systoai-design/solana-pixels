@@ -40,7 +40,8 @@ const jersey10 = Jersey_10({
 
 export const metadata: Metadata = {
   title: "SOL Pixel - Own 1M Pixels Forever on Solana Blockchain | Digital Advertising Canvas",
-  description: "Buy and own pixels forever on the Solana blockchain using PIXEL tokens.", // Added missing comma after description
+  description:
+    "Buy and own pixels forever on the Solana blockchain using PIXEL tokens."
   generator: "Pixel Team",
   keywords: "Solana, blockchain, pixels, digital advertising, NFT, crypto, canvas, pixel art, SOL, credits",
   icons: {
@@ -53,13 +54,15 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "SOL Pixel - Own 1M Pixels Forever on Solana",
-    description: "Buy and own pixels forever on the Solana blockchain using PIXEL tokens.",
+    description:
+      "Buy and own pixels forever on the Solana blockchain using PIXEL tokens.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "SOL Pixel - Own 1M Pixels Forever on Solana",
-    description: "Buy and own pixels forever on the Solana blockchain using PIXEL tokens.",
+    description:
+      "Buy and own pixels forever on the Solana blockchain using PIXEL tokens.",
   },
 }
 

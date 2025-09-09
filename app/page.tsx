@@ -83,6 +83,10 @@ export default function PixelCanvas() {
 
   const [recentTakeovers, setRecentTakeovers] = useState<Set<string>>(new Set())
 
+  const [connectionHealth, setConnectionHealth] = useState<"healthy" | "degraded" | "failed">("healthy")
+  const [consecutiveFailures, setConsecutiveFailures] = useState(0)
+  const [lastSuccessfulSync, setLastSuccessfulSync] = useState(Date.now())
+
   const canRetractBlock = (block: PixelBlock): boolean => {
     if (!connected || !publicKey) return false
 
@@ -278,12 +282,27 @@ export default function PixelCanvas() {
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbWR3cG96YWZ0aGp4Z2J2b2F1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjM1MTYxOSwiZXhwIjoyMDcxOTI3NjE5fQ.tECXG3JrQaFv2oDtneielFI5uoHQ4jABB7IlqKuk2CU",
       )
 
-      const { data, error } = await supabase.from("pixel_blocks").select("*")
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+
+      const { data, error } = await supabase.from("pixel_blocks").select("*").abortSignal(controller.signal)
+
+      clearTimeout(timeoutId)
 
       if (error) {
         console.error("[v0] Database load error:", error)
+        setConsecutiveFailures((prev) => prev + 1)
+        if (consecutiveFailures >= 3) {
+          setConnectionHealth("failed")
+        } else if (consecutiveFailures >= 1) {
+          setConnectionHealth("degraded")
+        }
         return []
       }
+
+      setConsecutiveFailures(0)
+      setConnectionHealth("healthy")
+      setLastSuccessfulSync(Date.now())
 
       const blocks: PixelBlock[] = (data || []).map((block) => ({
         id: block.id,
@@ -291,7 +310,7 @@ export default function PixelCanvas() {
         y: block.start_y,
         width: block.width,
         height: block.height,
-        owner: block.wallet_address || undefined, // Use wallet_address for ownership display
+        owner: block.wallet_address || undefined,
         imageUrl: block.image_url || undefined,
         url: block.link_url || undefined,
         color: block.image_url ? undefined : "#" + Math.floor(Math.random() * 16777215).toString(16),
@@ -303,6 +322,12 @@ export default function PixelCanvas() {
       return blocks
     } catch (error) {
       console.error("[v0] Database load error:", error)
+      setConsecutiveFailures((prev) => prev + 1)
+      if (consecutiveFailures >= 3) {
+        setConnectionHealth("failed")
+      } else if (consecutiveFailures >= 1) {
+        setConnectionHealth("degraded")
+      }
       return []
     }
   }
@@ -359,7 +384,14 @@ export default function PixelCanvas() {
   }
 
   const syncPixelBlocks = useCallback(async () => {
-    if (isSyncing || Date.now() - lastSyncTime < 2000 || isUploadingImage || isSyncPaused) {
+    const minSyncInterval = connectionHealth === "healthy" ? 2000 : connectionHealth === "degraded" ? 10000 : 30000
+
+    if (isSyncing || Date.now() - lastSyncTime < minSyncInterval || isUploadingImage || isSyncPaused) {
+      return
+    }
+
+    if (connectionHealth === "failed" && Date.now() - lastSuccessfulSync > 60000) {
+      console.log("[v0] Skipping sync due to persistent connection failures")
       return
     }
 
@@ -448,6 +480,7 @@ export default function PixelCanvas() {
       console.error("[v0] Sync error:", error)
     } finally {
       setIsSyncing(false)
+      setLastSyncTime(Date.now())
     }
   }, [
     isSyncing,
@@ -458,6 +491,9 @@ export default function PixelCanvas() {
     shownNotifications,
     isUploadingImage,
     isSyncPaused,
+    connectionHealth,
+    consecutiveFailures,
+    lastSuccessfulSync,
   ])
 
   useEffect(() => {
@@ -472,12 +508,25 @@ export default function PixelCanvas() {
 
     initializeCanvas()
 
-    const syncInterval = setInterval(syncPixelBlocks, 5000)
+    const getSyncInterval = () => {
+      switch (connectionHealth) {
+        case "healthy":
+          return 5000 // 5 seconds
+        case "degraded":
+          return 15000 // 15 seconds
+        case "failed":
+          return 60000 // 1 minute
+        default:
+          return 5000
+      }
+    }
+
+    const syncInterval = setInterval(syncPixelBlocks, getSyncInterval())
 
     return () => {
       clearInterval(syncInterval)
     }
-  }, [])
+  }, [connectionHealth])
 
   const handlePurchaseSuccess = useCallback(
     async (newBlock: {
@@ -1405,8 +1454,6 @@ export default function PixelCanvas() {
           <Card className="p-4 bg-white border-4 border-black">
             <h3 className="font-bold text-xl mb-4 text-center comic-font text-black">💸 BUY PIXELS</h3>
             <div className="space-y-3">
-              
-              
               {isAdmin && (
                 <div className="bg-yellow-200 p-3 border-2 border-black">
                   <p className="font-bold comic-font text-black text-lg">ADMIN: 0.001 CREDITS/PIXEL!</p>

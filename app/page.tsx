@@ -43,6 +43,7 @@ export default function PixelCanvas() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [selectedArea, setSelectedArea] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const [totalPixelsSold, setTotalPixelsSold] = useState(0)
+  const [recentUpdates, setRecentUpdates] = useState<Array<{ user: string; block: string; time: string }>>([])
 
   const [isSelecting, setIsSelecting] = useState(false)
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null)
@@ -121,14 +122,14 @@ export default function PixelCanvas() {
       // Store in recent updates for transparency
       const shortAdmin = publicKey.toString().slice(0, 8) + "..."
       const shortTarget = (targetOwner || targetBlock.owner)?.slice(0, 8) + "..."
-      // setRecentUpdates((prev) => [
-      //   {
-      //     user: `${shortAdmin} (ADMIN)`,
-      //     block: `${action.toUpperCase()} ${targetBlock.x},${targetBlock.y} from ${shortTarget}`,
-      //     time: "Just now",
-      //   },
-      //   ...prev.slice(0, 4),
-      // ])
+      setRecentUpdates((prev) => [
+        {
+          user: `${shortAdmin} (ADMIN)`,
+          block: `${action.toUpperCase()} ${targetBlock.x},${targetBlock.y} from ${shortTarget}`,
+          time: "Just now",
+        },
+        ...prev.slice(0, 4),
+      ])
     } catch (error) {
       console.error("[v0] Failed to log admin action:", error)
     }
@@ -432,17 +433,17 @@ export default function PixelCanvas() {
         if (databaseBlocks.length > 0) {
           const latestBlock = databaseBlocks[databaseBlocks.length - 1]
           const shortAddress = latestBlock.owner?.slice(0, 8) + "..." || "Unknown"
-          // setRecentUpdates((prev) => {
-          //   const newUpdate = {
-          //     user: shortAddress,
-          //     block: `${latestBlock.x},${latestBlock.y}`,
-          //     time: "Just now",
-          //   }
-          //   if (prev.length === 0 || prev[0].block !== newUpdate.block) {
-          //     return [newUpdate, ...prev.slice(0, 4)]
-          //   }
-          //   return prev
-          // })
+          setRecentUpdates((prev) => {
+            const newUpdate = {
+              user: shortAddress,
+              block: `${latestBlock.x},${latestBlock.y}`,
+              time: "Just now",
+            }
+            if (prev.length === 0 || prev[0].block !== newUpdate.block) {
+              return [newUpdate, ...prev.slice(0, 4)]
+            }
+            return prev
+          })
         }
       }
     } catch (error) {
@@ -521,14 +522,14 @@ export default function PixelCanvas() {
       setSelectedArea(null)
 
       const shortAddress = newBlock.owner?.slice(0, 8) + "..." || "Unknown"
-      // setRecentUpdates((prev) => [
-      //   {
-      //     user: shortAddress,
-      //     block: `${newBlock.x},${newBlock.y}`,
-      //     time: "Just now",
-      //   },
-      //   ...prev.slice(0, 4),
-      // ])
+      setRecentUpdates((prev) => [
+        {
+          user: shortAddress,
+          block: `${newBlock.x},${newBlock.y}`,
+          time: "Just now",
+        },
+        ...prev.slice(0, 4),
+      ])
 
       const existingBlocks = pixelBlocks.filter(
         (block) =>
@@ -556,7 +557,7 @@ export default function PixelCanvas() {
         console.log("[v0] Purchase war successful! Block taken over from other users")
       }
     },
-    [pixelBlocks, connected, publicKey],
+    [pixelBlocks, connected, publicKey, setRecentUpdates],
   )
 
   const handleImageUpload = async (blockIndex: number, imageUrl: string, url?: string, message?: string) => {
@@ -784,14 +785,14 @@ export default function PixelCanvas() {
       setSelectedArea(null)
 
       const shortAddress = publicKey?.toString().slice(0, 8) + "..." || "Admin"
-      // setRecentUpdates((prev) => [
-      //   {
-      //     user: shortAddress,
-      //     block: `${area.x},${area.y}`,
-      //     time: "Just now (RETRACTED)",
-      //   },
-      //   ...prev.slice(0, 4),
-      // ])
+      setRecentUpdates((prev) => [
+        {
+          user: shortAddress,
+          block: `${area.x},${area.y}`,
+          time: "Just now (RETRACTED)",
+        },
+        ...prev.slice(0, 4),
+      ])
     } finally {
       setIsRetracting(false)
     }
@@ -1430,7 +1431,7 @@ export default function PixelCanvas() {
               </div>
             </div>
             <div className="space-y-2 max-h-40 overflow-y-auto">
-              {/* {recentUpdates.length > 0 ? (
+              {recentUpdates.length > 0 ? (
                 recentUpdates.map((update, i) => (
                   <div
                     key={i}
@@ -1446,7 +1447,7 @@ export default function PixelCanvas() {
                   <p className="text-gray-500 cyber-font">NO RECENT ACTIVITY</p>
                   <p className="text-gray-400">BE THE FIRST TO BUY!</p>
                 </div>
-              )} */}
+              )}
             </div>
           </Card>
 

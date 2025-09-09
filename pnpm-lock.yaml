@@ -183,7 +183,7 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.17)
       tweetnacl:
-        specifier: 1.0.3
+        specifier: latest
         version: 1.0.3
       vaul:
         specifier: ^0.9.6
